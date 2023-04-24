@@ -296,4 +296,7 @@ def trace_tasks_activations_speedometer_df(trace):
 
 
 def trace_uclamp_df(trace):
-    return trace.df_event('uclamp_update_tsk').reset_index()
+    df = trace.df_event('uclamp_update_tsk').reset_index()
+    tasks = trace.get_tasks()
+    df['task'] = df['pid'].apply(lambda p: " ".join(tasks.get(p, ['<unknown>'])))
+    return df
