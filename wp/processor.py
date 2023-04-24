@@ -17,7 +17,7 @@ from wp.trace_to_dfs import trace_wakeup_latency_drarm_df, trace_wakeup_latency_
 from wp.trace_to_dfs import trace_wakeup_latency_geekbench_df, trace_wakeup_latency_speedometer_df
 from wp.trace_to_dfs import trace_tasks_activations_drarm_df, trace_tasks_activations_jankbench_df
 from wp.trace_to_dfs import trace_tasks_activations_geekbench_df, trace_tasks_activations_speedometer_df
-from wp.trace_to_dfs import trace_tasks_residency_cgroup_df
+from wp.trace_to_dfs import trace_tasks_residency_cgroup_df, trace_uclamp_df
 
 
 class WorkloadProcessor:
@@ -54,11 +54,12 @@ class WorkloadProcessor:
             'tasks-activations': self.trace_tasks_activations_analysis,
             'adpf': self.adpf_analysis,
             'thermal': self.thermal_analysis,
+            'uclamp': self.trace_uclamp_analysis,
             'energy-estimate': self.trace_energy_estimate_analysis,
             'cgroup-attach': self.trace_cgroup_attach_task_analysis,
             'wakeup-latency': self.trace_wakeup_latency_analysis,
             'wakeup-latency-cgroup': self.trace_wakeup_latency_cgroup_analysis,
-            'tasks-residency-cgroup': self.trace_tasks_residency_cgroup_analysis
+            'tasks-residency-cgroup': self.trace_tasks_residency_cgroup_analysis,
         }
 
         for metric in metrics:
@@ -330,4 +331,11 @@ class WorkloadProcessor:
         )
 
         df.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup_total.pqt'))
+        print(df)
+
+    def trace_uclamp_analysis(self):
+        log.info('Collecting uclamp data')
+        df = self.apply_analysis(trace_uclamp_df)
+
+        df.to_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
         print(df)

@@ -293,3 +293,7 @@ def trace_tasks_activations_speedometer_df(trace):
     ]
 
     return trace_task_activations_df(trace, tasks)
+
+
+def trace_uclamp_df(trace):
+    return trace.df_event('uclamp_update_tsk').reset_index()
