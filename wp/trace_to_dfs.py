@@ -11,6 +11,8 @@ CLUSTERS = {
     'big': [6, 7],
 }
 
+CGROUPS = ['background', 'foreground', 'system-background']
+
 
 def trace_pixel6_emeter_df(trace):
     return trace.ana.pixel6.df_power_meter()
@@ -104,7 +106,6 @@ def trace_cgroup_attach_task_df(trace):
 
 
 def trace_wakeup_latency_cgroup_df(trace):
-    cgroups = ['background', 'foreground', 'system-background']
     df_events = trace.df_event("cgroup_attach_task").reset_index()
 
     def task_latencies(task, cgroup):
@@ -126,55 +127,30 @@ def trace_wakeup_latency_cgroup_df(trace):
 
         return pd.concat([task_latencies(task, cgroup) for task in df_cgroup])
 
-    return pd.concat([cgroup_latencies(df_events, cgroup) for cgroup in cgroups]).reset_index()
+    return pd.concat([cgroup_latencies(df_events, cgroup) for cgroup in CGROUPS]).reset_index()
 
 
-# TODO: refactor
-def trace_task_residency_cgroup_df(trace):
-    cpuset_groups = ['/background', '/foreground', '/system-background']
-    cgroups = trace.df_event("cgroup_attach_task").reset_index()
-    cgroups = cgroups.query("dst_path in @cpuset_groups")
+def trace_tasks_residency_cgroup_df(trace):
+    df_events = trace.df_event("cgroup_attach_task").reset_index()
 
-    background_tasks = cgroups.query("dst_path == '/background'") \
-        .apply(lambda x: (x['pid'], x['comm']), axis=1)
-    try:
-        background_tasks = background_tasks.unique()
-    except Exception:
-        pass
+    def cgroup_residencies(df, cgroup):
+        df_cgroup_tasks = df.query(f"dst_path == '/{cgroup}'").apply(lambda x: TaskID(x['pid'], x['comm']), axis=1)
+        try:
+            df_cgroup_tasks = df_cgroup_tasks.unique()
+        except Exception:
+            pass
 
-    foreground_tasks = cgroups.query("dst_path == '/foreground'") \
-        .apply(lambda x: (x['pid'], x['comm']), axis=1)
-    try:
-        foreground_tasks = foreground_tasks.unique()
-    except Exception:
-        pass
+        df_residencies = trace.ana.tasks.df_tasks_total_residency(list(df_cgroup_tasks))
+        df_residencies['cgroup'] = cgroup
+        return df_residencies
 
-    system_background_tasks = cgroups.query("dst_path == '/system-background'") \
-        .apply(lambda x: (x['pid'], x['comm']), axis=1)
-    try:
-        system_background_tasks = system_background_tasks.unique()
-    except Exception:
-        pass
-
-    background_tasks_residency = trace.ana.tasks.df_tasks_total_residency(list(background_tasks))
-    background_tasks_residency['cgroup'] = 'background'
-
-    foreground_tasks_residency = trace.ana.tasks.df_tasks_total_residency(list(foreground_tasks))
-    foreground_tasks_residency['cgroup'] = 'foreground'
-
-    system_background_tasks_residency = trace.ana.tasks.df_tasks_total_residency(list(system_background_tasks))
-    system_background_tasks_residency['cgroup'] = 'system-background'
-
-    task_residency = pd.concat([background_tasks_residency, foreground_tasks_residency, system_background_tasks_residency]).reset_index()
-
-    task_residency['comm'] = task_residency['index'].map(trim_task_comm).astype(str)
-    task_residency['little'] = task_residency[[0.0, 1.0, 2.0, 3.0]].sum(axis=1)
-    task_residency['mid'] = task_residency[[4.0, 5.0]].sum(axis=1)
-    task_residency['big'] = task_residency[[6.0, 7.0]].sum(axis=1)
-    task_residency = task_residency.rename(columns={col:str(col) for col in task_residency.columns})
-    task_residency = task_residency.groupby(["comm", "cgroup"]).sum().sort_values(by='Total', ascending=False).reset_index()
-
-    return task_residency.reset_index()
+    df = pd.concat([cgroup_residencies(df_events, cgroup) for cgroup in CGROUPS]).reset_index()
+    df['comm'] = df['index'].map(trim_task_comm).astype(str)
+    for cluster, cpus in CLUSTERS.items():
+        df[cluster] = df[[float(cpu) for cpu in cpus]].sum(axis=1)
+    df = df.rename(columns={col: str(col) for col in df.columns})
+    df = df.groupby(["comm", "cgroup"]).sum().sort_values(by='Total', ascending=False).reset_index()
+    return df
 
 
 def trace_task_wakeup_latency_df(trace, tasks):
@@ -185,17 +161,6 @@ def trace_task_wakeup_latency_df(trace, tasks):
         return df
 
     return pd.concat([task_latency(pid, comm) for pid, comm in flatten(tasks)]).reset_index()
-
-
-def trace_wakeup_latency_jankbench_df(trace):
-    tasks = [
-        trace.get_task_ids('RenderThread'),
-        trace.get_task_ids('droid.benchmark'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('decon0_kthread'),
-    ]
-
-    return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_drarm_df(trace):
@@ -218,6 +183,17 @@ def trace_wakeup_latency_drarm_df(trace):
         trace.get_task_ids(task)
         for task in flatten(trace.get_tasks().values())
         if 'HwBinder' in task
+    ]
+
+    return trace_task_wakeup_latency_df(trace, tasks)
+
+
+def trace_wakeup_latency_jankbench_df(trace):
+    tasks = [
+        trace.get_task_ids('RenderThread'),
+        trace.get_task_ids('droid.benchmark'),
+        trace.get_task_ids('surfaceflinger'),
+        trace.get_task_ids('decon0_kthread'),
     ]
 
     return trace_task_wakeup_latency_df(trace, tasks)
@@ -258,7 +234,7 @@ def trace_task_activations_df(trace, tasks):
     return pd.concat([task_activations(pid, comm) for pid, comm in flatten(tasks)]).reset_index()
 
 
-def trace_task_activations_drarm_df(trace):
+def trace_tasks_activations_drarm_df(trace):
     tasks = [
         trace.get_task_ids('UnityMain'),
         trace.get_task_ids('UnityGfxDeviceW'),
@@ -278,6 +254,42 @@ def trace_task_activations_drarm_df(trace):
         trace.get_task_ids(task)
         for task in flatten(trace.get_tasks().values())
         if 'HwBinder' in task
+    ]
+
+    return trace_task_activations_df(trace, tasks)
+
+
+def trace_tasks_activations_jankbench_df(trace):
+    tasks = [
+        trace.get_task_ids('RenderThread'),
+        trace.get_task_ids('droid.benchmark'),
+        trace.get_task_ids('surfaceflinger'),
+        trace.get_task_ids('decon0_kthread'),
+    ]
+
+    return trace_task_activations_df(trace, tasks)
+
+
+def trace_tasks_activations_geekbench_df(trace):
+    tasks = [
+        trace.get_task_ids('AsyncTask #1'),
+        trace.get_task_ids('labs.geekbench5'),
+        trace.get_task_ids('surfaceflinger'),
+    ]
+
+    return trace_task_activations_df(trace, tasks)
+
+
+def trace_tasks_activations_speedometer_df(trace):
+    tasks = [
+        trace.get_task_ids('CrRendererMain'),
+        trace.get_task_ids('ThreadPoolForeg'),
+        trace.get_task_ids('.android.chrome'),
+        trace.get_task_ids('CrGpuMain'),
+        trace.get_task_ids('Compositor'),
+        trace.get_task_ids('Chrome_IOThread'),
+        trace.get_task_ids('surfaceflinger'),
+        trace.get_task_ids('RenderThread'),
     ]
 
     return trace_task_activations_df(trace, tasks)

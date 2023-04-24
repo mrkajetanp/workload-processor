@@ -30,7 +30,6 @@ def run():
     config_path = Path(__file__).resolve().parent.parent.joinpath('config.yaml')
     with open(config_path, "r") as ymlfile:
         config = yaml.load(ymlfile, Loader=yaml.CLoader)
-    print(config)
 
     plat_info_path = os.path.expanduser(config['target']['plat_info'])
     processor = WorkloadProcessor(WAOutput(args.wa_path), init=args.init, plat_info_path=plat_info_path)

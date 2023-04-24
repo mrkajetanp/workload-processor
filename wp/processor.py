@@ -15,7 +15,9 @@ from wp.trace_to_dfs import trace_sched_pelt_cfs_df, trace_tasks_residency_time_
 from wp.trace_to_dfs import trace_energy_estimate_df, trace_cgroup_attach_task_df, trace_wakeup_latency_cgroup_df
 from wp.trace_to_dfs import trace_wakeup_latency_drarm_df, trace_wakeup_latency_jankbench_df
 from wp.trace_to_dfs import trace_wakeup_latency_geekbench_df, trace_wakeup_latency_speedometer_df
-from wp.trace_to_dfs import trace_task_activations_drarm_df
+from wp.trace_to_dfs import trace_tasks_activations_drarm_df, trace_tasks_activations_jankbench_df
+from wp.trace_to_dfs import trace_tasks_activations_geekbench_df, trace_tasks_activations_speedometer_df
+from wp.trace_to_dfs import trace_tasks_residency_cgroup_df
 
 
 class WorkloadProcessor:
@@ -35,7 +37,6 @@ class WorkloadProcessor:
         else:
             log.debug('analysis directory exists, files might be overwritten')
 
-        # TODO: better handling for this
         self.plat_info = None
         if plat_info_path is not None:
             self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
@@ -57,7 +58,7 @@ class WorkloadProcessor:
             'cgroup-attach': self.trace_cgroup_attach_task_analysis,
             'wakeup-latency': self.trace_wakeup_latency_analysis,
             'wakeup-latency-cgroup': self.trace_wakeup_latency_cgroup_analysis,
-            'task-residency-cgroup': self.trace_task_residency_cgroup_analysis
+            'tasks-residency-cgroup': self.trace_tasks_residency_cgroup_analysis
         }
 
         for metric in metrics:
@@ -272,7 +273,7 @@ class WorkloadProcessor:
 
         label = self.wa_output.jobs[0].label
         if label not in label_to_analysis:
-            log.error(f'Workload {label} does not yet support latency analysis')
+            log.error(f'Workload {label} does not yet support task wakeup latency analysis')
             return
         df = self.apply_analysis(label_to_analysis[label])
 
@@ -289,12 +290,11 @@ class WorkloadProcessor:
     def trace_tasks_activations_analysis(self):
         log.info('Collecting task activations')
 
-        # TODO: fix
         label_to_analysis = {
-            'jankbench': trace_wakeup_latency_jankbench_df,
-            'drarm': trace_task_activations_drarm_df,
-            'geekbench': trace_wakeup_latency_geekbench_df,
-            'speedometer': trace_wakeup_latency_speedometer_df,
+            'jankbench': trace_tasks_activations_jankbench_df,
+            'drarm': trace_tasks_activations_drarm_df,
+            'geekbench': trace_tasks_activations_geekbench_df,
+            'speedometer': trace_tasks_activations_speedometer_df,
         }
 
         label = self.wa_output.jobs[0].label
@@ -319,13 +319,15 @@ class WorkloadProcessor:
         df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup_mean.pqt'))
         print(df)
 
-    def trace_task_residency_cgroup_analysis(self):
-        log.info('Collecting per-cgroup task residency')
-        # task_residency.to_parquet(path + '/task_residency_cgroup.pqt')
+    def trace_tasks_residency_cgroup_analysis(self):
+        log.info('Collecting per-cgroup tasks residency')
+        df = self.apply_analysis(trace_tasks_residency_cgroup_df)
+        df.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup.pqt'))
+        print(df)
 
-        # task_residency_total = task_residency.groupby(["wa_path", "cgroup", "iteration"]) \
-        #     .sum().reset_index() \
-        #     .sort_values(by=['iteration', 'wa_path', 'cgroup', 'Total'], ascending=[True, True, True, False])
+        df = df.groupby(["wa_path", "cgroup", "iteration"]).sum().reset_index().sort_values(
+            by=['iteration', 'wa_path', 'cgroup', 'Total'], ascending=[True, True, True, False]
+        )
 
-        # task_residency_total.to_parquet(path + '/task_residency_cgroup_total.pqt')
-        pass
+        df.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup_total.pqt'))
+        print(df)
