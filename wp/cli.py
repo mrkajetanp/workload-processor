@@ -39,4 +39,3 @@ def run():
         processor.run_metrics(metrics=args.metrics)
     else:
         log.info('No metrics requested, exiting..')
-

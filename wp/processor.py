@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os
 import subprocess
 import logging as log
@@ -13,8 +11,11 @@ from wp.constants import FULL_METRICS
 from wp.trace_to_dfs import trace_cpu_idle_df, trace_cpu_idle_miss_df, trace_idle_residency_time_df
 from wp.trace_to_dfs import trace_pixel6_emeter_df, trace_frequency_df, trace_frequency_residency_df
 from wp.trace_to_dfs import trace_overutilized_df
-from wp.trace_to_dfs import trace_sched_pelt_cfs_df, trace_tasks_df, trace_tasks_residency_time_df
+from wp.trace_to_dfs import trace_sched_pelt_cfs_df, trace_tasks_residency_time_df
 from wp.trace_to_dfs import trace_energy_estimate_df, trace_cgroup_attach_task_df, trace_wakeup_latency_cgroup_df
+from wp.trace_to_dfs import trace_wakeup_latency_drarm_df, trace_wakeup_latency_jankbench_df
+from wp.trace_to_dfs import trace_wakeup_latency_geekbench_df, trace_wakeup_latency_speedometer_df
+from wp.trace_to_dfs import trace_task_activations_drarm_df
 
 
 class WorkloadProcessor:
@@ -48,8 +49,8 @@ class WorkloadProcessor:
             'freq': self.trace_frequency_analysis,
             'overutil': self.trace_overutilized_analysis,
             'pelt': self.trace_sched_pelt_cfs_analysis,
-            'tasks': self.trace_tasks_analysis,
-            'task-residency': self.trace_tasks_residency_time_analysis,
+            'tasks-residency': self.trace_tasks_residency_time_analysis,
+            'tasks-activations': self.trace_tasks_activations_analysis,
             'adpf': self.adpf_analysis,
             'thermal': self.thermal_analysis,
             'energy-estimate': self.trace_energy_estimate_analysis,
@@ -186,21 +187,21 @@ class WorkloadProcessor:
         pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_mean.pqt'))
         print(pelt)
 
-    def trace_tasks_analysis(self):
-        log.info('Collecting tasks data')
-        tasks = self.apply_analysis(trace_tasks_df)
-        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks.pqt'))
-        print(tasks)
-
     def trace_tasks_residency_time_analysis(self):
         log.info('Collecting task residency data')
         tasks = self.apply_analysis(trace_tasks_residency_time_df)
         tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency.pqt'))
         print(tasks)
 
+        tasks = tasks.groupby(['wa_path', 'kernel', 'iteration', "comm"]).sum().sort_values(
+            by='Total', ascending=False
+        ).reset_index()
+        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_total.pqt'))
+        print(tasks)
+
         tasks = tasks.query("not comm.str.startswith('swapper')")
         tasks = tasks.groupby(['wa_path', 'kernel', 'iteration']).sum().reset_index()
-        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_total.pqt'))
+        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cpu_total.pqt'))
         print(tasks)
 
     def adpf_analysis(self):
@@ -262,18 +263,48 @@ class WorkloadProcessor:
     def trace_wakeup_latency_analysis(self):
         log.info('Collecting task wakeup latencies')
 
-        # Assuming all jobs are the same workload
-        if self.wa_output.jobs[0].label == 'jankbench':
-            pass
+        label_to_analysis = {
+            'jankbench': trace_wakeup_latency_jankbench_df,
+            'drarm': trace_wakeup_latency_drarm_df,
+            'geekbench': trace_wakeup_latency_geekbench_df,
+            'speedometer': trace_wakeup_latency_speedometer_df,
+        }
 
-        # wakeup_latency.to_parquet(path + '/wakeup_latency.pqt')
+        label = self.wa_output.jobs[0].label
+        if label not in label_to_analysis:
+            log.error(f'Workload {label} does not yet support latency analysis')
+            return
+        df = self.apply_analysis(label_to_analysis[label])
 
-        # wakeup_latency_mean = wakeup_latency.groupby(['wa_path', 'kernel', 'iteration', 'comm']) \
-        #     .agg(lambda x: series_mean(x)).reset_index()[['wa_path', 'kernel', 'iteration', 'comm', 'wakeup_latency']].sort_values(by=['iteration', 'comm'], ascending=[True, True])
+        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency.pqt'))
+        print(df)
 
-        # wakeup_latency_mean.to_parquet(path + '/wakeup_latency_mean.pqt')
+        df = df.query("not comm.str.startswith('Hw')")
+        df = df_iterations_mean(df, other_cols=['comm'])
+        df = df[['wa_path', 'iteration', 'comm', 'wakeup_latency']]
+        df = df.sort_values(by=['iteration', 'wa_path', 'comm'], ascending=[True, True, True])
+        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency_mean.pqt'))
+        print(df)
 
-        pass
+    def trace_tasks_activations_analysis(self):
+        log.info('Collecting task activations')
+
+        # TODO: fix
+        label_to_analysis = {
+            'jankbench': trace_wakeup_latency_jankbench_df,
+            'drarm': trace_task_activations_drarm_df,
+            'geekbench': trace_wakeup_latency_geekbench_df,
+            'speedometer': trace_wakeup_latency_speedometer_df,
+        }
+
+        label = self.wa_output.jobs[0].label
+        if label not in label_to_analysis:
+            log.error(f'Workload {label} does not yet support task activation analysis')
+            return
+        df = self.apply_analysis(label_to_analysis[label])
+
+        df.to_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
+        print(df)
 
     def trace_wakeup_latency_cgroup_analysis(self):
         log.info('Collecting per-cgroup task wakeup latency')

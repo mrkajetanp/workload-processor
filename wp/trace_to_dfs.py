@@ -4,7 +4,7 @@ import lisa
 from lisa.trace import TaskID
 from wp.helpers import df_add_cluster, flatten, trim_task_comm
 
-# TODO: extract these into some target_info module?
+# TODO: pull this from platform info instead
 CLUSTERS = {
     'little': [0, 1, 2, 3],
     'mid': [4, 5],
@@ -87,20 +87,14 @@ def trace_sched_pelt_cfs_df(trace):
     return df
 
 
-def trace_tasks_df(trace):
-    tasks = trace.ana.tasks.df_tasks_total_residency()
-    tasks = tasks.rename(columns={0.0: 'cpu0', 1.0: 'cpu1', 2.0: 'cpu2', 3.0: 'cpu3',
-                                  4.0: 'cpu4', 5.0: 'cpu5', 6.0: 'cpu6', 7.0: 'cpu7'}).reset_index()
-    return tasks
-
-
 def trace_tasks_residency_time_df(trace):
     df = trace.ana.tasks.df_tasks_total_residency().reset_index()
     df['comm'] = df['index'].map(trim_task_comm).astype(str)
     for cluster, cpus in CLUSTERS.items():
         df[cluster] = df[[float(cpu) for cpu in cpus]].sum(axis=1)
     df = df.rename(columns={col: str(col) for col in df.columns})
-    df = df.groupby("comm").sum().sort_values(by='Total', ascending=False).reset_index()
+    df = df.rename(columns={0.0: 'cpu0', 1.0: 'cpu1', 2.0: 'cpu2', 3.0: 'cpu3',
+                            4.0: 'cpu4', 5.0: 'cpu5', 6.0: 'cpu6', 7.0: 'cpu7'})
     return df
 
 
@@ -183,16 +177,14 @@ def trace_task_residency_cgroup_df(trace):
     return task_residency.reset_index()
 
 
-def trace_wakeup_latency_task_df(trace, tasks):
-    latency_list = []
-    for pid, comm in flatten(tasks):
-        latencies = trace.ana.latency.df_latency_wakeup((pid, comm))
-        latencies['pid'] = pid
-        latencies['comm'] = comm
-        latency_list.append(latencies)
+def trace_task_wakeup_latency_df(trace, tasks):
+    def task_latency(pid, comm):
+        df = trace.ana.latency.df_latency_wakeup((pid, comm))
+        df['pid'] = pid
+        df['comm'] = comm
+        return df
 
-    wakeup_latency = pd.concat(latency_list)
-    return wakeup_latency.reset_index()
+    return pd.concat([task_latency(pid, comm) for pid, comm in flatten(tasks)]).reset_index()
 
 
 def trace_wakeup_latency_jankbench_df(trace):
@@ -203,7 +195,32 @@ def trace_wakeup_latency_jankbench_df(trace):
         trace.get_task_ids('decon0_kthread'),
     ]
 
-    return trace_wakeup_latency_task_df(trace, tasks)
+    return trace_task_wakeup_latency_df(trace, tasks)
+
+
+def trace_wakeup_latency_drarm_df(trace):
+    tasks = [
+        trace.get_task_ids('UnityMain'),
+        trace.get_task_ids('UnityGfxDeviceW'),
+        trace.get_task_ids('Thread-7'),
+        trace.get_task_ids('Thread-5'),
+        trace.get_task_ids('Thread-6'),
+        trace.get_task_ids('Thread-4'),
+        trace.get_task_ids('surfaceflinger'),
+        trace.get_task_ids('mali-cmar-backe'),
+        trace.get_task_ids('mali_jd_thread'),
+        trace.get_task_ids('writer'),
+        trace.get_task_ids('FastMixer'),
+        trace.get_task_ids('RenderEngine'),
+        trace.get_task_ids('Audio Mixer Thr'),
+        trace.get_task_ids('UnityChoreograp'),
+    ] + [
+        trace.get_task_ids(task)
+        for task in flatten(trace.get_tasks().values())
+        if 'HwBinder' in task
+    ]
+
+    return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_geekbench_df(trace):
@@ -213,7 +230,7 @@ def trace_wakeup_latency_geekbench_df(trace):
         trace.get_task_ids('surfaceflinger'),
     ]
 
-    return trace_wakeup_latency_task_df(trace, tasks)
+    return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_speedometer_df(trace):
@@ -228,15 +245,39 @@ def trace_wakeup_latency_speedometer_df(trace):
         trace.get_task_ids('RenderThread'),
     ]
 
-    return trace_wakeup_latency_task_df(trace, tasks)
+    return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_task_activations_df(trace, tasks):
-    task_activations = pd.DataFrame()
-    for pid, comm in flatten(tasks):
-        activations = trace.ana.tasks.df_task_activation((pid, comm))
-        activations['pid'] = pid
-        activations['comm'] = comm
-        task_activations = task_activations.append(activations)
+    def task_activations(pid, comm):
+        df = trace.ana.tasks.df_task_activation((pid, comm))
+        df['pid'] = pid
+        df['comm'] = comm
+        return df
 
-    return task_activations.reset_index()
+    return pd.concat([task_activations(pid, comm) for pid, comm in flatten(tasks)]).reset_index()
+
+
+def trace_task_activations_drarm_df(trace):
+    tasks = [
+        trace.get_task_ids('UnityMain'),
+        trace.get_task_ids('UnityGfxDeviceW'),
+        trace.get_task_ids('Thread-7'),
+        trace.get_task_ids('Thread-5'),
+        trace.get_task_ids('Thread-6'),
+        trace.get_task_ids('Thread-4'),
+        trace.get_task_ids('surfaceflinger'),
+        trace.get_task_ids('mali-cmar-backe'),
+        trace.get_task_ids('mali_jd_thread'),
+        trace.get_task_ids('writer'),
+        trace.get_task_ids('FastMixer'),
+        trace.get_task_ids('RenderEngine'),
+        trace.get_task_ids('Audio Mixer Thr'),
+        trace.get_task_ids('UnityChoreograp'),
+    ] + [
+        trace.get_task_ids(task)
+        for task in flatten(trace.get_tasks().values())
+        if 'HwBinder' in task
+    ]
+
+    return trace_task_activations_df(trace, tasks)
