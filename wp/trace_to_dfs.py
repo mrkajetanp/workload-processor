@@ -299,4 +299,6 @@ def trace_uclamp_df(trace):
     df = trace.df_event('uclamp_update_tsk').reset_index()
     tasks = trace.get_tasks()
     df['task'] = df['pid'].apply(lambda p: " ".join(tasks.get(p, ['<unknown>'])))
+    # Normalise the timestamps across iterations
+    df['Time'] -= trace.start
     return df
