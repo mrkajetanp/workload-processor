@@ -1,5 +1,8 @@
 
-FULL_METRICS = ['power', 'idle', 'idle_miss', 'freq', 'overutil', 'pelt',
-                'tasks-residency', 'tasks-activations', 'adpf', 'thermal',
-                'energy-estimate', 'cgroup-attach', 'wakeup-latency',
-                'wakeup-latency-cgroup', 'tasks-residency-cgroup']
+FULL_METRICS = [
+    'power', 'idle', 'idle_miss', 'freq', 'overutil', 'pelt',
+    'adpf', 'thermal', 'wakeup-latency',
+    'tasks-residency', 'tasks-activations',
+    'cgroup-attach', 'wakeup-latency-cgroup', 'tasks-residency-cgroup',
+    'energy-estimate',
+]
