@@ -6,9 +6,10 @@ from lisa.utils import setup_logging
 from lisa.wa import WAOutput
 
 from wp.helpers import load_yaml
-from wp.constants import FULL_METRICS, CONFIG_PATH
+from wp.constants import FULL_METRICS, CONFIG_PATH, DEVICE_COMMANDS
 from wp.processor import WorkloadProcessor
 from wp.runner import WorkloadRunner
+from wp.device import WorkloadDevice
 
 
 def process(args):
@@ -26,6 +27,26 @@ def process(args):
 def run(args):
     runner = WorkloadRunner(args.dir, force=args.force)
     runner.run(args.workload, args.tag)
+
+
+def device(args):
+    device = WorkloadDevice()
+
+    cmd_to_device_function = {
+        'status': device.status,
+        'disable-cpusets': device.disable_cpusets,
+        'disable-cpushares': device.disable_cpushares,
+        'menu': device.menu,
+        'teo': device.teo,
+        'latency-sensitive': device.latency_sensitive,
+        'powersave': device.powersave,
+        'performance': device.performance,
+        'schedutil': device.schedutil,
+        'sugov-rate-limit': device.sugov_rate_limit,
+    }
+
+    for command in args.commands:
+        cmd_to_device_function[command]()
 
 
 def main():
@@ -48,6 +69,10 @@ def main():
     parser_run.add_argument('-d', '--dir', help='Output directory')
     parser_run.add_argument('-f', '--force', action='store_true', help='Overwrite output directory if it exists.')
     parser_run.set_defaults(func=run)
+
+    parser_device = subparsers.add_parser('device', help='Control the device')
+    parser_device.add_argument('commands', choices=DEVICE_COMMANDS, nargs='+', help='Device commands to run')
+    parser_device.set_defaults(func=device)
 
     args = parser.parse_args()
 
