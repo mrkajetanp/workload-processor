@@ -54,7 +54,7 @@ def main():
     subparsers = parser.add_subparsers(required=True, dest='subparser_name', title='subcommands')
     parser.add_argument('-v', '--verbose', action='store_true', help="Verbose output, including lisa debug logging")
 
-    parser_process = subparsers.add_parser('process', help='Process a workload and parse traces')
+    parser_process = subparsers.add_parser('process', help='Process a workload run and parse traces')
     parser_process.add_argument('wa_path')
     parser_process.add_argument('-i', '--init', action='store_true', help='Parse traces to initialise the workload')
     group_process = parser_process.add_mutually_exclusive_group()
