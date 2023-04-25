@@ -1,5 +1,5 @@
 target:
-  plat_info: ~/power/pixel6/scripts/p6-platform-info.yml
+  plat_info: ~/power/pixel6/workload-processor/assets/p6-platform-info.yml
   adb_host: 127.0.0.1
   adb_port: 5037
 device:
