@@ -1,0 +1,52 @@
+config:
+        iterations: 10
+        max_retries: 10
+        augmentations:
+                - trace-cmd
+                - file_poller
+                - perf
+                - ~cpufreq
+                - ~csv
+                - ~interrupts
+                - ~execution_time
+        trace-cmd:
+                events: [
+                  'cpu_frequency',
+                  'sched_switch',
+                  'sched_wakeup',
+                  'sched_wakeup_new',
+                  'task_rename',
+                  'thermal_exynos*',
+                  'cpu_idle',
+                  'cpu_idle_miss',
+                  'pixel6_emeter',
+                  'cgroup_attach_task',
+                  'sched_pelt_cfs',
+                  'sched_overutilized',
+                ]
+                buffer_size: 184350
+                report: false
+        file_poller:
+          files:
+            - /sys/class/thermal/thermal_zone0/temp
+            - /sys/class/thermal/thermal_zone1/temp
+            - /sys/class/thermal/thermal_zone2/temp
+        perf:
+          perf_type: 'simpleperf'
+          command: 'stat'
+          optionstring: '--app com.android.benchmark'
+          events: [
+            'cpu-cycles',
+            'instructions',
+            'stalled-cycles-backend',
+            'cache-misses',
+            'context-switches',
+            'cpu-migrations',
+            'major-faults',
+            'minor-faults',
+            'page-faults',
+            'cpu-clock',
+            'task-clock',
+          ]
+workloads:
+        - name: jankbench

@@ -1,0 +1,56 @@
+config:
+        iterations: 3
+        max_retries: 10
+        augmentations:
+                - trace-cmd
+                - ~perf
+                - ~cpufreq
+                - ~csv
+                - ~interrupts
+                - ~execution_time
+        trace-cmd:
+                events: [
+                  'cpu_frequency',
+                  'sched_switch',
+                  'sched_wakeup',
+                  'sched_wakeup_new',
+                  'task_rename',
+                  'thermal_exynos*',
+                  'cpu_idle',
+                  'cpu_idle_miss',
+                  'cgroup_attach_task',
+                  'pixel6_emeter',
+                  'sched_pelt_cfs',
+                  'sched_overutilized',
+                ]
+                buffer_size: 184350
+                report: false
+        file_poller:
+          files:
+            - /sys/class/thermal/thermal_zone0/temp
+            - /sys/class/thermal/thermal_zone1/temp
+            - /sys/class/thermal/thermal_zone2/temp
+        perf:
+          perf_type: 'simpleperf'
+          command: 'stat'
+          optionstring: '--app com.primatelabs.geekbench6'
+          events: [
+            'cpu-cycles',
+            'instructions',
+            'stalled-cycles-backend',
+            'cache-misses',
+            'context-switches',
+            'cpu-migrations',
+            'major-faults',
+            'minor-faults',
+            'page-faults',
+            'cpu-clock',
+            'task-clock',
+          ]
+        device_config:
+          load_default_modules: false
+          modules: null
+workloads:
+        - name: geekbench
+          params:
+            version: 5

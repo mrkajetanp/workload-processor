@@ -17,7 +17,7 @@ classifiers = [
 packages = ['wp']
 
 [project.scripts]
-workload-processor = "wp.cli:run"
+workload-processor = "wp.cli:main"
 
 [build-system]
 requires = ["setuptools>=61.0"]

@@ -2,16 +2,13 @@ import os
 import yaml
 import logging as log
 import pandas as pd
-from pathlib import Path
 from lisa.trace import Trace, MockTraceParser
 from lisa.datautils import series_mean
 
 
-def parse_config():
-    config_path = Path(__file__).resolve().parent.parent.joinpath('config.yaml')
-    with open(config_path, "r") as ymlfile:
-        config = yaml.load(ymlfile, Loader=yaml.CLoader)
-    return config
+def load_yaml(path):
+    with open(path, "r") as ymlfile:
+        return yaml.load(ymlfile, Loader=yaml.CLoader)
 
 
 def df_add_cluster(df, cpu_col='cpu'):
