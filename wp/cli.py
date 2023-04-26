@@ -18,8 +18,9 @@ def process(args):
     plat_info_path = os.path.expanduser(config['target']['plat_info'])
     processor = WorkloadProcessor(WAOutput(args.wa_path), init=args.init, plat_info_path=plat_info_path)
 
+    metrics = args.metrics if args.metrics else FULL_METRICS
     if not args.no_metrics:
-        processor.run_metrics(metrics=args.metrics)
+        processor.run_metrics(metrics)
     else:
         log.info('No metrics requested, exiting..')
 

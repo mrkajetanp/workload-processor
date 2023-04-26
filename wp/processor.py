@@ -4,6 +4,8 @@ import logging as log
 import pandas as pd
 
 from lisa.platforms.platinfo import PlatformInfo
+from lisa.trace import MissingTraceEventError
+from devlib.exception import HostError
 
 from wp import trace_to_dfs as tdfs
 from wp.helpers import wa_output_to_mock_traces, traces_analysis, df_add_wa_output_tags, df_iterations_mean
@@ -33,7 +35,7 @@ class WorkloadProcessor:
             self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
         self.traces = wa_output_to_mock_traces(wa_output, self.plat_info)
 
-    def run_metrics(self, metrics=FULL_METRICS):
+    def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
             'power': self.trace_pixel6_emeter_analysis,
             'idle': self.trace_cpu_idle_analysis,
@@ -54,7 +56,10 @@ class WorkloadProcessor:
         }
 
         for metric in metrics:
-            METRIC_TO_ANALYSIS[metric]()
+            try:
+                METRIC_TO_ANALYSIS[metric]()
+            except (MissingTraceEventError, HostError) as e:
+                log.error(e)
 
     # Parse and initialise the traces
     def init_traces(self):
