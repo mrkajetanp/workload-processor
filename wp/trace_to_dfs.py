@@ -125,7 +125,10 @@ def trace_wakeup_latency_cgroup_df(trace):
         except Exception:
             pass
 
-        return pd.concat([task_latencies(task, cgroup) for task in df_cgroup])
+        try:
+            return pd.concat([task_latencies(task, cgroup) for task in df_cgroup])
+        except ValueError:
+            return pd.DataFrame()
 
     return pd.concat([cgroup_latencies(df_events, cgroup) for cgroup in CGROUPS]).reset_index()
 
@@ -140,7 +143,10 @@ def trace_tasks_residency_cgroup_df(trace):
         except Exception:
             pass
 
-        df_residencies = trace.ana.tasks.df_tasks_total_residency(list(df_cgroup_tasks))
+        try:
+            df_residencies = trace.ana.tasks.df_tasks_total_residency(list(df_cgroup_tasks))
+        except ValueError:
+            return pd.DataFrame()
         df_residencies['cgroup'] = cgroup
         return df_residencies
 
