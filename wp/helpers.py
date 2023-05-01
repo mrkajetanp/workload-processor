@@ -92,7 +92,5 @@ def flatten(t):
     return [item for sublist in t for item in sublist]
 
 
-# TODO: refactor
 def trim_task_comm(task):
-    idx = task.find(':')
-    return task[idx+1:-1]
+    return task[1:-1].split(':')[1]

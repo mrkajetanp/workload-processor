@@ -75,12 +75,10 @@ def trace_frequency_residency_df(trace):
 
 
 def trace_overutilized_df(trace):
-    df = pd.DataFrame()
     time = trace.ana.status.get_overutilized_time()
     total_time = trace.time_range
     perc = round(time / total_time * 100, 2)
-    # TODO: convert to concat
-    return df.append({'time': time, 'total_time': total_time, 'percentage': perc}, ignore_index=True)
+    return pd.DataFrame({'time': [time], 'total_time': [total_time], 'percentage': [perc]})
 
 
 def trace_sched_pelt_cfs_df(trace):

@@ -170,8 +170,18 @@ class WorkloadProcessor:
 
     def trace_overutilized_analysis(self):
         log.info('Collecting overutilized data')
-        overutil = self.apply_analysis(tdfs.trace_overutilized_df)
+        overutil = self.apply_analysis(tdfs.trace_overutilized_df).reset_index(drop=True)
         overutil.to_parquet(os.path.join(self.analysis_path, 'overutilized.pqt'))
+        print(overutil)
+
+        overutil = overutil.groupby(['wa_path']).mean().reset_index()
+        overutil['metric'] = 'overutilized'
+        overutil = overutil[['metric', 'wa_path', 'time', 'total_time', 'percentage']]
+        overutil['percentage'] = round(overutil['percentage'], 2)
+        overutil['time'] = round(overutil['time'], 2)
+        overutil['total_time'] = round(overutil['total_time'], 2)
+
+        overutil.to_parquet(os.path.join(self.analysis_path, 'overutilized_mean.pqt'))
         print(overutil)
 
     def trace_sched_pelt_cfs_analysis(self):
