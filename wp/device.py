@@ -47,7 +47,7 @@ class WorkloadDevice:
         cpushares_fg = self.device.shell("cat /dev/cpuctl/foreground/cpu.shares").strip()
         cpushares_sbg = self.device.shell("cat /dev/cpuctl/system-background/cpu.shares").strip()
         cpushares_sys = self.device.shell("cat /dev/cpuctl/system/cpu.shares").strip()
-        log.info(f"cpushares: bg: {cpushares_bg}, fg: {cpushares_fg}, sys-bg: {cpushares_sbg}")
+        log.info(f"cpushares: bg: {cpushares_bg} fg: {cpushares_fg} sys: {cpushares_sys} sys-bg: {cpushares_sbg}")
 
         if 'schedutil' in [ltl_cpufreq, mid_cpufreq, big_cpufreq]:
             policy_0_rate_limit = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy0/schedutil/rate_limit_us").strip()
