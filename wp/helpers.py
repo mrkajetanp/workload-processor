@@ -48,6 +48,8 @@ def df_add_wa_output_tags(df, out):
 
 
 def wa_output_to_mock_traces(wa_output, plat_info=None):
+    log.debug('Using trace-parquet + MockTraceParser to create traces')
+
     job_events_paths = {
         job.iteration: os.path.join(job.basepath, 'trace-events', '*.pq')
         for job in wa_output.jobs
@@ -72,6 +74,21 @@ def wa_output_to_mock_traces(wa_output, plat_info=None):
     }
 
     return traces
+
+
+def wa_output_to_traces(wa_output, plat_info=None):
+    log.debug('Using Lisa default trace parsing to create traces')
+
+    def apply_plat_info(trace):
+        if plat_info is not None:
+            trace.plat_info = plat_info
+            return trace
+
+    return {
+        int(label.split('-')[1]): apply_plat_info(trace)
+        for label, trace in
+        wa_output['trace'].traces.items()
+    }
 
 
 def convert_event_pqt(pqt):

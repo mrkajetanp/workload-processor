@@ -16,7 +16,8 @@ def process(args):
     # Load the config file
     config = load_yaml(CONFIG_PATH)
     plat_info_path = os.path.expanduser(config['target']['plat_info'])
-    processor = WorkloadProcessor(WAOutput(args.wa_path), init=args.init, plat_info_path=plat_info_path)
+    processor = WorkloadProcessor(WAOutput(args.wa_path), init=args.init,
+                                  plat_info_path=plat_info_path, no_parser=args.no_parser)
 
     metrics = args.metrics if args.metrics else FULL_METRICS
     if not args.no_metrics:
@@ -57,7 +58,9 @@ def main():
 
     parser_process = subparsers.add_parser('process', help='Process a workload run and parse traces')
     parser_process.add_argument('wa_path')
-    parser_process.add_argument('-i', '--init', action='store_true', help='Parse traces to initialise the workload')
+    group_process_parse = parser_process.add_mutually_exclusive_group()
+    group_process_parse.add_argument('-i', '--init', action='store_true', help='Parse traces to init the workload')
+    group_process_parse.add_argument('--no-parser', action='store_true', help='Do not use trace-parquet on traces')
     group_process = parser_process.add_mutually_exclusive_group()
     group_process.add_argument('-m', '--metrics', nargs='+', choices=FULL_METRICS,
                                help='Metrics to process, defaults to all.')
@@ -66,8 +69,9 @@ def main():
 
     parser_run = subparsers.add_parser('run', help='Run a workload')
     parser_run.add_argument('workload', help='Workload name or agenda file path')
-    parser_run.add_argument('tag', help='Tag for the run')
-    parser_run.add_argument('-d', '--dir', help='Output directory')
+    group_run = parser_run.add_mutually_exclusive_group()
+    group_run.add_argument('tag', nargs='?', help='Tag for the run')
+    group_run.add_argument('-d', '--dir', help='Output directory')
     parser_run.add_argument('-f', '--force', action='store_true', help='Overwrite output directory if it exists.')
     parser_run.set_defaults(func=run)
 

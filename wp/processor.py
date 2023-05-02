@@ -1,5 +1,6 @@
 import os
 import subprocess
+import shutil
 import logging as log
 import pandas as pd
 
@@ -8,19 +9,13 @@ from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
 
 from wp import trace_to_dfs as tdfs
-from wp.helpers import wa_output_to_mock_traces, traces_analysis, df_add_wa_output_tags, df_iterations_mean
-from wp.helpers import df_sort_by_clusters
-from wp.constants import FULL_METRICS
+from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, traces_analysis
+from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
 
 
 class WorkloadProcessor:
-    def __init__(self, wa_output, init=False, plat_info_path=None):
+    def __init__(self, wa_output, init=False, plat_info_path=None, no_parser=False):
         self.wa_output = wa_output
-
-        # Initialise traces
-        if init or self.needs_init():
-            log.info('Parsing and initialising traces..')
-            self.init_traces()
 
         # create a directory for the analysis
         self.analysis_path = os.path.join(wa_output.path, 'analysis')
@@ -33,7 +28,19 @@ class WorkloadProcessor:
         self.plat_info = None
         if plat_info_path is not None:
             self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
-        self.traces = wa_output_to_mock_traces(wa_output, self.plat_info)
+
+        trace_parquet_found = shutil.which('trace-parquet') is not None
+
+        # Initialise traces
+        if (trace_parquet_found and not no_parser) and (init or self.needs_init()):
+            log.info('Parsing and initialising traces..')
+            self.init_traces()
+
+        # Trace parquet not found or fallback requested
+        if no_parser or not trace_parquet_found:
+            self.traces = wa_output_to_traces(wa_output, self.plat_info)
+        else:
+            self.traces = wa_output_to_mock_traces(wa_output, self.plat_info)
 
     def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
