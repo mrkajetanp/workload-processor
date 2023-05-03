@@ -11,7 +11,7 @@ from wp.constants import CONFIG_PATH, AGENDAS_PATH, SUPPORTED_WORKLOADS
 
 
 class WorkloadRunner:
-    def __init__(self, output_dir, force=False):
+    def __init__(self, output_dir, force=False, module=True):
         self.config = load_yaml(CONFIG_PATH)
         self.output_dir = output_dir
         self.force = force
@@ -25,9 +25,10 @@ class WorkloadRunner:
             log.debug('adb already running as root')
 
         # insert the lisa module
-        module_path = self.config['device']['lisa_module_path']
-        log.debug('Inserting the lisa module')
-        print(self.device.shell(f"insmod {module_path}"))
+        if module:
+            module_path = self.config['device']['lisa_module_path']
+            log.debug('Inserting the lisa module')
+            print(self.device.shell(f"insmod {module_path}"))
 
     def run(self, workload, tag):
         if workload.endswith('yaml') or workload.endswith('yml'):

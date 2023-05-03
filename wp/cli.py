@@ -25,7 +25,7 @@ def process(args):
 
 
 def run(args):
-    runner = WorkloadRunner(args.dir, force=args.force)
+    runner = WorkloadRunner(args.dir, force=args.force, module=not args.no_module)
     runner.run(args.workload, args.tag)
 
 
@@ -70,7 +70,8 @@ def main():
     group_run = parser_run.add_mutually_exclusive_group()
     group_run.add_argument('tag', nargs='?', help='Tag for the run')
     group_run.add_argument('-d', '--dir', help='Output directory')
-    parser_run.add_argument('-f', '--force', action='store_true', help='Overwrite output directory if it exists.')
+    parser_run.add_argument('-n', '--no-module', action='store_true', help="Don't try to load the Lisa kernel module")
+    parser_run.add_argument('-f', '--force', action='store_true', help='Overwrite output directory if it exists')
     parser_run.set_defaults(func=run)
 
     parser_device = subparsers.add_parser('device', help='Control the device')

@@ -65,7 +65,8 @@ workload-processor run agenda.yaml baseline
 #### Relevant help section
 
 ```
-usage: WA Workload Processor run [-h] [-d DIR] [-f] workload [tag]
+usage: WA Workload Processor run [-h] [-d DIR] [-n] [-f] workload [tag]
+
 
 positional arguments:
   workload           Workload name or agenda file path
@@ -74,7 +75,8 @@ positional arguments:
 optional arguments:
   -h, --help         show this help message and exit
   -d DIR, --dir DIR  Output directory
-  -f, --force        Overwrite output directory if it exists.
+  -n, --no-module    Don't try to load the Lisa kernel module
+  -f, --force        Overwrite output directory if it exists
 ```
 
 ### The processor
