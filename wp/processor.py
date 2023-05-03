@@ -4,6 +4,7 @@ import shutil
 import logging as log
 import pandas as pd
 
+from lisa.wa import WAOutput
 from lisa.platforms.platinfo import PlatformInfo
 from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
@@ -14,11 +15,13 @@ from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations
 
 
 class WorkloadProcessor:
-    def __init__(self, wa_output, init=False, plat_info_path=None, no_parser=False):
-        self.wa_output = wa_output
+    def __init__(self, output_path, init=False, plat_info_path=None, no_parser=False):
+        if not os.path.exists(output_path):
+            raise FileNotFoundError(f"WA output path '{output_path}' not found.")
+        self.wa_output = WAOutput(output_path)
 
         # create a directory for the analysis
-        self.analysis_path = os.path.join(wa_output.path, 'analysis')
+        self.analysis_path = os.path.join(self.wa_output.path, 'analysis')
         if not os.path.exists(self.analysis_path):
             log.debug('analysis directory not found, creating..')
             os.mkdir(self.analysis_path)
@@ -38,15 +41,15 @@ class WorkloadProcessor:
 
         # Trace parquet not found or fallback requested
         if no_parser or not trace_parquet_found:
-            self.traces = wa_output_to_traces(wa_output, self.plat_info)
+            self.traces = wa_output_to_traces(self.wa_output, self.plat_info)
         else:
-            self.traces = wa_output_to_mock_traces(wa_output, self.plat_info)
+            self.traces = wa_output_to_mock_traces(self.wa_output, self.plat_info)
 
     def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
             'power': self.trace_pixel6_emeter_analysis,
             'idle': self.trace_cpu_idle_analysis,
-            'idle_miss': self.trace_cpu_idle_miss_analysis,
+            'idle-miss': self.trace_cpu_idle_miss_analysis,
             'freq': self.trace_frequency_analysis,
             'overutil': self.trace_overutilized_analysis,
             'pelt': self.trace_sched_pelt_cfs_analysis,

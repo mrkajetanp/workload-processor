@@ -3,7 +3,6 @@ import argparse
 import logging as log
 
 from lisa.utils import setup_logging
-from lisa.wa import WAOutput
 
 from wp.helpers import load_yaml
 from wp.constants import FULL_METRICS, CONFIG_PATH, DEVICE_COMMANDS
@@ -16,14 +15,13 @@ def process(args):
     # Load the config file
     config = load_yaml(CONFIG_PATH)
     plat_info_path = os.path.expanduser(config['target']['plat_info'])
-    processor = WorkloadProcessor(WAOutput(args.wa_path), init=args.init,
-                                  plat_info_path=plat_info_path, no_parser=args.no_parser)
+    processor = WorkloadProcessor(args.wa_path, init=args.init, plat_info_path=plat_info_path, no_parser=args.no_parser)
 
     metrics = args.metrics if args.metrics else FULL_METRICS
     if not args.no_metrics:
         processor.run_metrics(metrics)
     else:
-        log.info('No metrics requested, exiting..')
+        log.warning('No metrics requested, exiting..')
 
 
 def run(args):
