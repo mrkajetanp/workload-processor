@@ -55,22 +55,31 @@ class WorkloadNotebookAnalysis:
 
         self.wa_outputs = [WAOutput(os.path.join(benchmark_path, benchmark_dir)) for benchmark_dir in benchmark_dirs]
         self.results = [wa_output['results'].df for wa_output in self.wa_outputs]
-        self.kernels = [result['kernel'][0] for result in self.results]
-        self.wa_paths = [trim_wa_path(result['wa_path'][0]) for result in self.results]
+        self.kernels = [
+            output._jobs[os.path.basename(output.path)][0].target_info.kernel_version.release
+            for output in self.wa_outputs
+        ]
+        self.wa_paths = [
+            trim_wa_path(os.path.basename(output.path))
+            for output in self.wa_outputs
+        ]
         self.results = pd.concat(self.results)
 
-        if 'scaled from(%)' in self.results.columns:
-            self.results = self.results.drop(columns=['scaled from(%)'])
-        self.results['wa_path'] = self.results['wa_path'].map(trim_wa_path)
+        if not self.results.empty:
+            if 'scaled from(%)' in self.results.columns:
+                self.results = self.results.drop(columns=['scaled from(%)'])
+            self.results['wa_path'] = self.results['wa_path'].map(trim_wa_path)
 
-        # separate perf results from benchmark results
-        self.results_perf = self.results[
-            self.results['metric'].str.contains('perf')
-        ].reset_index(drop=True).query("value != 0")
-        self.results_perf['metric'] = self.results_perf['metric'].str[7:]
-        self.results = self.results[
-            ~self.results['metric'].str.contains('perf')
-        ].reset_index(drop=True).query("value != 0")
+            # separate perf results from benchmark results
+            self.results_perf = self.results[
+                self.results['metric'].str.contains('perf')
+            ].reset_index(drop=True).query("value != 0")
+            self.results_perf['metric'] = self.results_perf['metric'].str[7:]
+            self.results = self.results[
+                ~self.results['metric'].str.contains('perf')
+            ].reset_index(drop=True).query("value != 0")
+        else:
+            self.results_perf = pd.DataFrame()
 
         self.analysis = dict()
         self.summary = dict()
