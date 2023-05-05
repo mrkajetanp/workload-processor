@@ -306,3 +306,30 @@ def trace_uclamp_df(trace):
     # Normalise the timestamps across iterations
     df['Time'] -= trace.start
     return df
+
+
+PERF_COUNTER_IDS = {
+    0x0011: 'CPU_CYCLES', 0x8: 'INST_RETIRED', 0x1B: 'INST_SPEC', 0x22: 'BR_MIS_PRED_RETIRED',
+    0x23: 'STALL_FRONTEND', 0x24: 'STALL_BACKEND', 0x4005: 'STALL_BACKEND_MEM',
+    0x0004: 'L1D_CACHE', 0x0003: 'L1D_CACHE_MISS',
+    0x2B: 'L3D_CACHE', 0x2A: 'L3D_CACHE_MISS',
+}
+
+
+def trace_perf_counters_df(trace):
+    df = trace.df_event('perf_counter').reset_index()[['Time', 'cpu', 'counter_id', 'value']]
+
+    def process_counter_group_df(counter, group_df):
+        group_df[f'{counter}'] = group_df.groupby('cpu').diff()['value']
+        group_df.rename(columns={'value': f'{counter}-Total'}, inplace=True)
+        return pd.melt(group_df, id_vars=['Time', 'cpu'], value_vars=[f'{counter}-Total', f'{counter}'])
+
+    def rename_counter_ids(counter):
+        if 'Total' in counter:
+            return PERF_COUNTER_IDS[int(counter.split('-')[0])] + "-Total"
+        else:
+            return PERF_COUNTER_IDS[int(counter)]
+
+    result = pd.concat([process_counter_group_df(counter, group_df) for counter, group_df in df.groupby('counter_id')])
+    result['variable'] = result['variable'].map(rename_counter_ids)
+    return result

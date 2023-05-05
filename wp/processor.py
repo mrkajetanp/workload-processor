@@ -57,6 +57,7 @@ class WorkloadProcessor:
             'tasks-activations': self.trace_tasks_activations_analysis,
             'adpf': self.adpf_analysis,
             'thermal': self.thermal_analysis,
+            'perf-trace-event': self.trace_perf_event_analysis,
             'uclamp': self.trace_uclamp_analysis,
             'energy-estimate': self.trace_energy_estimate_analysis,
             'cgroup-attach': self.trace_cgroup_attach_task_analysis,
@@ -354,4 +355,11 @@ class WorkloadProcessor:
         df = self.apply_analysis(tdfs.trace_uclamp_df)
 
         df.to_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
+        print(df)
+
+    def trace_perf_event_analysis(self):
+        log.info('Collecting perf counter event data')
+        df = self.apply_analysis(tdfs.trace_perf_counters_df)
+
+        df.to_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
         print(df)

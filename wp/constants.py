@@ -5,7 +5,7 @@ AGENDAS_PATH = Path(__file__).resolve().parent.parent.joinpath('agendas')
 
 FULL_METRICS = [
     'power', 'idle', 'idle-miss', 'freq', 'overutil', 'pelt',
-    'uclamp', 'adpf', 'thermal', 'wakeup-latency',
+    'uclamp', 'adpf', 'thermal', 'perf-trace-event', 'wakeup-latency',
     'tasks-residency', 'tasks-activations',
     'cgroup-attach', 'wakeup-latency-cgroup', 'tasks-residency-cgroup',
     'energy-estimate',

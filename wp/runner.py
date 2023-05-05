@@ -27,7 +27,7 @@ class WorkloadRunner:
         # insert the lisa module
         if module:
             module_path = self.config['device']['lisa_module_path']
-            log.debug('Inserting the lisa module')
+            log.debug(f'Inserting the lisa module with {module_path}')
             print(self.device.shell(f"insmod {module_path}"))
 
     def run(self, workload, tag):
