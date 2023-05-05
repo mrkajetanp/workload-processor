@@ -246,7 +246,7 @@ class WorkloadProcessor:
         report_aggs = df_iterations_mean(aggregates)[['average fps', 'iteration', 'kernel', 'wa_path']]
         report_aggs['frame count'] = aggregates.groupby([
             'wa_path', 'kernel', 'iteration'
-        ]).sum().reset_index()['# frame count']
+        ]).apply(lambda p: p['# frame count'].iloc[-1]).reset_index()[0]
         report_aggs = report_aggs[['average fps', 'frame count', 'iteration', 'kernel', 'wa_path']]
 
         report_aggs.to_parquet(os.path.join(self.analysis_path, 'adpf_totals.pqt'))
