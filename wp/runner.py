@@ -6,6 +6,7 @@ import logging as log
 from datetime import date
 from ppadb.client import Client as AdbClient
 
+from devlib.exception import TargetStableError
 from wp.helpers import load_yaml
 from wp.constants import CONFIG_PATH, AGENDAS_PATH, SUPPORTED_WORKLOADS
 
@@ -16,7 +17,11 @@ class WorkloadRunner:
         self.output_dir = output_dir
         self.force = force
         self.adb_client = AdbClient(host=self.config['target']['adb_host'], port=int(self.config['target']['adb_port']))
-        self.device = self.adb_client.devices()[0]
+
+        try:
+            self.device = self.adb_client.devices()[0]
+        except IndexError:
+            raise TargetStableError('No target devices found')
 
         log.debug('Restarting adb as root')
         try:

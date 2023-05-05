@@ -32,21 +32,8 @@ def run(args):
 def device(args):
     device = WorkloadDevice()
 
-    cmd_to_device_function = {
-        'status': device.status,
-        'disable-cpusets': device.disable_cpusets,
-        'disable-cpushares': device.disable_cpushares,
-        'menu': device.menu,
-        'teo': device.teo,
-        'latency-sensitive': device.latency_sensitive,
-        'powersave': device.powersave,
-        'performance': device.performance,
-        'schedutil': device.schedutil,
-        'sugov-rate-limit': device.sugov_rate_limit,
-    }
-
     for command in args.commands:
-        cmd_to_device_function[command]()
+        device.dispatch(command)
 
 
 def main():

@@ -17,6 +17,28 @@ class WorkloadDevice:
         except RuntimeError as e:
             log.debug(e)
 
+    def dispatch(self, command):
+        cmd_to_function = {
+            'status': self.status,
+            'disable-cpusets': self.disable_cpusets,
+            'disable-cpushares': self.disable_cpushares,
+            'menu': self.menu,
+            'teo': self.teo,
+            'latency-sensitive': self.latency_sensitive,
+            'powersave': self.powersave,
+            'performance': self.performance,
+            'schedutil': self.schedutil,
+            'sugov-rate-limit': self.sugov_rate_limit,
+        }
+
+        try:
+            cmd_to_function[command]()
+        except RuntimeError as e:
+            if 'closed' in str(e):
+                log.error('ADB Connection closed')
+            else:
+                raise e
+
     def status(self):
         log.info('Showing current device status')
         big_temp = self.device.shell("cat /sys/class/thermal/thermal_zone0/temp").strip()
