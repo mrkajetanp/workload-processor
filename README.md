@@ -106,8 +106,8 @@ While much slower it might be useful for some cases where `trace-parquet` might 
 #### Relevant help section
 
 ```
-usage: WA Workload Processor process [-h] [-i | --no-parser]
-                                     [-m {power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
+usage: WA Workload Processor process [-h] [-i | --no-parser] [-s]
+                                     [-m {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
                                      | --no-metrics]
                                      wa_path
 
@@ -116,11 +116,17 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -i, --init            Parse traces to init the workload
-  --no-parser           Do not use trace-parquet on traces
-  -m {power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...], --metrics {power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle_miss,freq,overutil,pelt,uclamp,adpf,thermal,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
+  -m {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...], --metrics {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
                         Metrics to process, defaults to all.
   --no-metrics          Do not process metrics
+
+Trace parsing:
+  Options for parsing traces
+
+  -i, --init            Parse traces to init the workload
+  --no-parser           Do not use trace-parquet on traces
+  -s, --skip-validation
+                        Skip trace validation (only when using trace-parquet)
 ```
 
 ### Device controller

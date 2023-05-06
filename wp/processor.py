@@ -6,7 +6,7 @@ import pandas as pd
 
 from lisa.wa import WAOutput
 from lisa.platforms.platinfo import PlatformInfo
-from lisa.trace import MissingTraceEventError
+from lisa.trace import MissingTraceEventError, DroppedTraceEventError
 from devlib.exception import HostError
 
 from wp import trace_to_dfs as tdfs
@@ -15,7 +15,7 @@ from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations
 
 
 class WorkloadProcessor:
-    def __init__(self, output_path, init=False, plat_info_path=None, no_parser=False):
+    def __init__(self, output_path, init=False, plat_info_path=None, no_parser=False, validate=True):
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"WA output path '{output_path}' not found.")
         self.wa_output = WAOutput(output_path)
@@ -36,6 +36,8 @@ class WorkloadProcessor:
 
         # Initialise traces
         if (trace_parquet_found and not no_parser) and (init or self.needs_init()):
+            if validate:
+                self.validate_traces()
             log.info('Parsing and initialising traces..')
             self.init_traces()
 
@@ -113,6 +115,12 @@ class WorkloadProcessor:
         ]
 
         return not all([os.path.exists(path) for path in trace_events_paths])
+
+    def validate_traces(self):
+        log.info('Validating traces..')
+        for trace in self.wa_output['trace'].traces.values():
+            trace.start
+        log.info('Traces validated successfully')
 
     def apply_analysis(self, trace_to_df):
         return df_add_wa_output_tags(traces_analysis(self.traces, trace_to_df), self.wa_output)

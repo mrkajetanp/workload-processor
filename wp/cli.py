@@ -15,7 +15,8 @@ def process(args):
     # Load the config file
     config = load_yaml(CONFIG_PATH)
     plat_info_path = os.path.expanduser(config['target']['plat_info'])
-    processor = WorkloadProcessor(args.wa_path, init=args.init, plat_info_path=plat_info_path, no_parser=args.no_parser)
+    processor = WorkloadProcessor(args.wa_path, init=args.init, plat_info_path=plat_info_path,
+                                  no_parser=args.no_parser, validate=not args.skip_validation)
 
     metrics = args.metrics if args.metrics else FULL_METRICS
     if not args.no_metrics:
@@ -43,13 +44,16 @@ def main():
 
     parser_process = subparsers.add_parser('process', help='Process a workload run and parse traces')
     parser_process.add_argument('wa_path')
-    group_process_parse = parser_process.add_mutually_exclusive_group()
-    group_process_parse.add_argument('-i', '--init', action='store_true', help='Parse traces to init the workload')
-    group_process_parse.add_argument('--no-parser', action='store_true', help='Do not use trace-parquet on traces')
-    group_process = parser_process.add_mutually_exclusive_group()
-    group_process.add_argument('-m', '--metrics', nargs='+', choices=FULL_METRICS,
-                               help='Metrics to process, defaults to all.')
-    group_process.add_argument('--no-metrics', action='store_true', help="Do not process metrics")
+    process_group_init = parser_process.add_argument_group('Trace parsing', 'Options for parsing traces')
+    process_group_init_parse = process_group_init.add_mutually_exclusive_group()
+    process_group_init_parse.add_argument('-i', '--init', action='store_true', help='Parse traces to init the workload')
+    process_group_init_parse.add_argument('--no-parser', action='store_true', help='Do not use trace-parquet on traces')
+    process_group_init.add_argument('-s', '--skip-validation', action='store_true',
+                                    help='Skip trace validation (only when using trace-parquet)')
+    process_group_metric = parser_process.add_mutually_exclusive_group()
+    process_group_metric.add_argument('-m', '--metrics', nargs='+', choices=FULL_METRICS,
+                                      help='Metrics to process, defaults to all.')
+    process_group_metric.add_argument('--no-metrics', action='store_true', help="Do not process metrics")
     parser_process.set_defaults(func=process)
 
     parser_run = subparsers.add_parser('run', help='Run a workload')
