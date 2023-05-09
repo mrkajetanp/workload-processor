@@ -1,12 +1,13 @@
 import os
 import subprocess
 import shutil
+import time
 import logging as log
 import pandas as pd
 
 from lisa.wa import WAOutput
 from lisa.platforms.platinfo import PlatformInfo
-from lisa.trace import MissingTraceEventError, DroppedTraceEventError
+from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
 
 from wp import trace_to_dfs as tdfs
@@ -70,7 +71,9 @@ class WorkloadProcessor:
 
         for metric in metrics:
             try:
+                analysis_start = time.time()
                 METRIC_TO_ANALYSIS[metric]()
+                log.debug(f"{metric} analysis complete, took {round(time.time() - analysis_start, 2)}s")
             except (MissingTraceEventError, HostError) as e:
                 log.error(e)
 
