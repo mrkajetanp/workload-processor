@@ -42,7 +42,7 @@ class WorkloadRunner:
             agenda_path = os.path.join(AGENDAS_PATH, f"agenda_{workload}.yaml")
         else:
             log.error(f"workload or agenda {workload} not supported")
-            return
+            return None
 
         agenda_parsed = load_yaml(agenda_path)
         workload_name = agenda_parsed['workloads'][0]['name']
@@ -59,3 +59,5 @@ class WorkloadRunner:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
         for c in iter(lambda: process.stdout.read(1), b""):
             sys.stdout.buffer.write(c)
+
+        return self.output_dir

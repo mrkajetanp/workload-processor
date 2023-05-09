@@ -27,7 +27,13 @@ def process(args):
 
 def run(args):
     runner = WorkloadRunner(args.dir, force=args.force, module=not args.no_module)
-    runner.run(args.workload, args.tag)
+    output = runner.run(args.workload, args.tag)
+
+    if args.auto_process and output is not None:
+        config = load_yaml(CONFIG_PATH)
+        plat_info_path = os.path.expanduser(config['target']['plat_info'])
+        processor = WorkloadProcessor(output, init=True, plat_info_path=plat_info_path, validate=True)
+        processor.run_metrics(FULL_METRICS)
 
 
 def device(args):
@@ -63,6 +69,7 @@ def main():
     group_run.add_argument('-d', '--dir', help='Output directory')
     parser_run.add_argument('-n', '--no-module', action='store_true', help="Don't try to load the Lisa kernel module")
     parser_run.add_argument('-f', '--force', action='store_true', help='Overwrite output directory if it exists')
+    parser_run.add_argument('-a', '--auto-process', action='store_true', help='Auto process after the run completes')
     parser_run.set_defaults(func=run)
 
     parser_device = subparsers.add_parser('device', help='Control the device')
