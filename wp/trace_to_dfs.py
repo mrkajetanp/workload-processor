@@ -61,9 +61,12 @@ def trace_frequency_df(trace):
 def trace_frequency_residency_df(trace):
     try:
         def frequency_residencies(cluster, cpu):
-            df = trace.ana.frequency.df_domain_frequency_residency(cpu).reset_index()
-            df['cluster'] = cluster
-            return df
+            try:
+                df = trace.ana.frequency.df_domain_frequency_residency(cpu).reset_index()
+                df['cluster'] = cluster
+                return df
+            except ValueError:
+                return pd.DataFrame()
 
         return pd.concat([
             frequency_residencies(cluster, cpus[0])
@@ -159,10 +162,13 @@ def trace_tasks_residency_cgroup_df(trace):
 
 def trace_task_wakeup_latency_df(trace, tasks):
     def task_latency(pid, comm):
-        df = trace.ana.latency.df_latency_wakeup((pid, comm))
-        df['pid'] = pid
-        df['comm'] = comm
-        return df
+        try:
+            df = trace.ana.latency.df_latency_wakeup((pid, comm))
+            df['pid'] = pid
+            df['comm'] = comm
+            return df
+        except ValueError:
+            return pd.DataFrame()
 
     return pd.concat([task_latency(pid, comm) for pid, comm in flatten(tasks)]).reset_index()
 
