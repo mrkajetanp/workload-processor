@@ -1,3 +1,4 @@
+import time
 import logging as log
 
 from ppadb.client import Client as AdbClient
@@ -13,9 +14,13 @@ class WorkloadDevice:
 
         log.debug('Restarting adb as root')
         try:
-            log.info(self.device.root())
+            self.device.root()
+            log.info('ADB restarted as root')
         except RuntimeError as e:
             log.debug(e)
+
+        # Give ADB on device a moment to initialise
+        time.sleep(2)
 
     def dispatch(self, command):
         cmd_to_function = {
@@ -72,10 +77,10 @@ class WorkloadDevice:
         log.info(f"cpushares: bg: {cpushares_bg} fg: {cpushares_fg} sys: {cpushares_sys} sys-bg: {cpushares_sbg}")
 
         if 'schedutil' in [ltl_cpufreq, mid_cpufreq, big_cpufreq]:
-            policy_0_rate_limit = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy0/schedutil/rate_limit_us").strip()
-            policy_4_rate_limit = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy4/schedutil/rate_limit_us").strip()
-            policy_6_rate_limit = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy6/schedutil/rate_limit_us").strip()
-            log.info(f"policy rate limits: 0: {policy_0_rate_limit}, 4: {policy_4_rate_limit}, 6: {policy_6_rate_limit}")
+            pol_0_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy0/schedutil/rate_limit_us").strip()
+            pol_4_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy4/schedutil/rate_limit_us").strip()
+            pol_6_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy6/schedutil/rate_limit_us").strip()
+            log.info(f"policy rate limits: 0: {pol_0_rl}, 4: {pol_4_rl}, 6: {pol_6_rl}")
 
     def disable_cpusets(self):
         log.info('Disabling cpusets for groups background, foreground, system-background and restricted')
@@ -120,4 +125,3 @@ class WorkloadDevice:
         log.info('Setting the sugov rate limit to 500')
         for policy in [0, 4, 6]:
             self.device.shell(f"echo '500' > /sys/devices/system/cpu/cpufreq/policy{policy}/schedutil/rate_limit_us")
-
