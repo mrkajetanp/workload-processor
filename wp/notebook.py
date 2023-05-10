@@ -98,20 +98,25 @@ class WorkloadNotebookAnalysis:
         print('wa_paths:', self.wa_paths)
         print('kernels:', self.kernels)
 
-    def load_combined_analysis(self, name, trim_path=True, preprocess=lambda d: d, postprocess=None):
-        try:
-            dfs = [
-                preprocess(pd.read_parquet(os.path.join(self.benchmark_path, benchmark, 'analysis', name)))
-                for benchmark in self.benchmark_dirs
-            ]
-            result = pd.concat(dfs)
-            if trim_path:
-                result['wa_path'] = result['wa_path'].map(trim_wa_path)
-            if postprocess is not None:
-                result = postprocess(result)
-            self.analysis[name.split('.')[0]] = result
-        except FileNotFoundError as e:
-            log.error(e)
+    def load_combined_analysis(self, name, trim_path=True, preprocess=lambda d: d,
+                               postprocess=None, allow_missing=False):
+
+        def load_parquet(benchmark):
+            try:
+                return preprocess(pd.read_parquet(os.path.join(self.benchmark_path, benchmark, 'analysis', name)))
+            except FileNotFoundError as e:
+                if allow_missing:
+                    log.debug(e)
+                    return pd.DataFrame()
+                log.error(e)
+
+        dfs = [load_parquet(benchmark) for benchmark in self.benchmark_dirs]
+        result = pd.concat(dfs)
+        if trim_path:
+            result['wa_path'] = result['wa_path'].map(trim_wa_path)
+        if postprocess is not None:
+            result = postprocess(result)
+        self.analysis[name.split('.')[0]] = result
 
     def plot_gmean_bars(self, df, x='stat', y='value', facet_col='metric', facet_col_wrap=3, title='',
                         width=800, height=600, gmean_round=1, include_columns=[], table_sort=None,
