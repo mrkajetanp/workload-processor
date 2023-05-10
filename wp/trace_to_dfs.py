@@ -339,3 +339,8 @@ def trace_perf_counters_df(trace):
     result = pd.concat([process_counter_group_df(counter, group_df) for counter, group_df in df.groupby('counter_id')])
     result['variable'] = result['variable'].map(rename_counter_ids)
     return result
+
+
+def trace_capacity_df(trace):
+    df = trace.df_event('sched_cpu_capacity').reset_index()
+    return df

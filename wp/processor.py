@@ -58,6 +58,7 @@ class WorkloadProcessor:
             'freq': self.trace_frequency_analysis,
             'overutil': self.trace_overutilized_analysis,
             'pelt': self.trace_sched_pelt_cfs_analysis,
+            'capacity': self.trace_capacity_analysis,
             'tasks-residency': self.trace_tasks_residency_time_analysis,
             'tasks-activations': self.trace_tasks_activations_analysis,
             'adpf': self.adpf_analysis,
@@ -375,4 +376,11 @@ class WorkloadProcessor:
         df = self.apply_analysis(tdfs.trace_perf_counters_df)
 
         df.to_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
+        print(df)
+
+    def trace_capacity_analysis(self):
+        log.info('Collecting capacity data')
+        df = self.apply_analysis(tdfs.trace_capacity_df)
+
+        df.to_parquet(os.path.join(self.analysis_path, 'capacity.pqt'))
         print(df)
