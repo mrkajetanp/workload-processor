@@ -1,5 +1,6 @@
 import os
 import yaml
+import pyarrow
 import logging as log
 import pandas as pd
 from lisa.trace import Trace, MockTraceParser
@@ -58,10 +59,18 @@ def wa_output_to_mock_traces(wa_output, plat_info=None):
     def list_files(path):
         return [file.strip() for file in os.popen(f"ls {path}").readlines()]
 
+    def pqt_readable(file):
+        try:
+            pd.read_parquet(file)
+            return True
+        except (pyarrow.lib.ArrowInvalid, OSError) as e:
+            log.error(f"{e} (reading {file})")
+            return False
+
     def trace_from_pqs(pq_files):
         trace = pqs_to_trace({
             os.path.basename(file).split('.')[0]: pd.read_parquet(file)
-            for file in pq_files
+            for file in pq_files if pqt_readable(file)
         })
         if plat_info is not None:
             trace.plat_info = plat_info
