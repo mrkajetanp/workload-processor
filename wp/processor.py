@@ -43,10 +43,12 @@ class WorkloadProcessor:
             self.init_traces()
 
         # Trace parquet not found or fallback requested
+        traces_start = time.time()
         if no_parser or not trace_parquet_found:
             self.traces = wa_output_to_traces(self.wa_output, self.plat_info)
         else:
             self.traces = wa_output_to_mock_traces(self.wa_output, self.plat_info)
+        log.debug(f"trace loading complete, took {round(time.time() - traces_start, 2)}s")
 
     def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
