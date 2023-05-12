@@ -343,4 +343,5 @@ def trace_perf_counters_df(trace):
 
 def trace_capacity_df(trace):
     df = trace.df_event('sched_cpu_capacity').reset_index()
+    df['time_it'] = df['Time'] - trace.start
     return df
