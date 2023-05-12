@@ -215,8 +215,12 @@ class WorkloadProcessor:
         pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs.pqt'))
         print(pelt)
 
-        pelt = pelt.query("path == '/'")[['cluster', 'load', 'util', 'iteration', 'wa_path', 'kernel']]
-        pelt = df_iterations_mean(pelt, other_cols=['cluster']).sort_values(by=['wa_path', 'iteration'])
+        pelt = pelt.query("path == '/'")
+        pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_root.pqt'))
+        print(pelt)
+
+        pelt = df_iterations_mean(pelt[['cluster', 'load', 'util', 'iteration', 'wa_path', 'kernel']],
+                                  other_cols=['cluster']).sort_values(by=['wa_path', 'iteration'])
         pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_mean.pqt'))
         print(pelt)
 
