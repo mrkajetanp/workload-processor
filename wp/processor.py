@@ -3,7 +3,7 @@ import subprocess
 import shutil
 import time
 import logging as log
-import pandas as pd
+import polars as pl
 
 from lisa.wa import WAOutput
 from lisa.platforms.platinfo import PlatformInfo
@@ -17,6 +17,8 @@ from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations
 
 class WorkloadProcessor:
     def __init__(self, output_path, init=False, plat_info_path=None, no_parser=False, validate=True):
+        pl.toggle_string_cache(True)
+
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"WA output path '{output_path}' not found.")
         self.wa_output = WAOutput(output_path)
@@ -129,173 +131,160 @@ class WorkloadProcessor:
         log.info('Traces validated successfully')
 
     def apply_analysis(self, trace_to_df):
+        log.debug(f'Applying analysis {trace_to_df.__name__}')
         return df_add_wa_output_tags(traces_analysis(self.traces, trace_to_df), self.wa_output)
 
     def trace_pixel6_emeter_analysis(self):
         log.info('Collecting data from pixel6_emeter')
         power = self.apply_analysis(tdfs.trace_pixel6_emeter_df)
-        power.to_parquet(os.path.join(self.analysis_path, 'pixel6_emeter.pqt'))
+        power.write_parquet(os.path.join(self.analysis_path, 'pixel6_emeter.pqt'))
         print(power)
         power_mean = df_iterations_mean(power, other_cols=['channel'])
-        power_mean.to_parquet(os.path.join(self.analysis_path, 'pixel6_emeter_mean.pqt'))
+        power_mean.write_parquet(os.path.join(self.analysis_path, 'pixel6_emeter_mean.pqt'))
         print(power_mean)
 
     def trace_energy_estimate_analysis(self):
         log.info('Computing energy estimates')
         df = self.apply_analysis(tdfs.trace_energy_estimate_df)
-        df.to_parquet(os.path.join(self.analysis_path, 'energy_estimate.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'energy_estimate.pqt'))
         print(df)
 
-        df = df_iterations_mean(df)
-        df['metric'] = 'energy-estimate'
-        df.to_parquet(os.path.join(self.analysis_path, 'energy_estimate_mean.pqt'))
+        df = df_iterations_mean(df).with_columns(
+            pl.lit('energy-estimate').alias('metric')
+        )
+        df.write_parquet(os.path.join(self.analysis_path, 'energy_estimate_mean.pqt'))
         print(df)
 
     def trace_cpu_idle_analysis(self):
         log.info('Collecting cpu_idle events')
         idle = self.apply_analysis(tdfs.trace_cpu_idle_df)
-        idle.to_parquet(os.path.join(self.analysis_path, 'cpu_idle.pqt'))
+        idle.write_parquet(os.path.join(self.analysis_path, 'cpu_idle.pqt'))
         print(idle)
 
         log.info('Computing idle residencies')
         idle_res = self.apply_analysis(tdfs.trace_idle_residency_time_df)
-        idle_res.to_parquet(os.path.join(self.analysis_path, 'idle_residency.pqt'))
+        idle_res.write_parquet(os.path.join(self.analysis_path, 'idle_residency.pqt'))
         print(idle_res)
 
     def trace_cpu_idle_miss_analysis(self):
         log.info('Collecting cpu_idle_miss events')
         idle_miss = self.apply_analysis(tdfs.trace_cpu_idle_miss_df)
 
-        idle_miss.to_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss.pqt'))
+        idle_miss.write_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss.pqt'))
         print(idle_miss)
 
-        idle_miss = idle_miss.groupby(['wa_path', 'kernel', 'iteration', 'cluster', 'below'], as_index=False).size()
-        idle_miss = df_sort_by_clusters(idle_miss, value_cols=['below', 'size']).rename(
-            columns={'size': 'count'}
-        )
+        idle_miss = idle_miss.groupby(['wa_path', 'kernel', 'iteration', 'cluster', 'below']).count()
+        idle_miss = df_sort_by_clusters(idle_miss, value_cols=['below', 'count'])
 
-        idle_miss.to_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss_counts.pqt'))
+        idle_miss.write_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss_counts.pqt'))
         print(idle_miss)
 
     def trace_frequency_analysis(self):
         log.info('Collecting frequency data')
         freq = self.apply_analysis(tdfs.trace_frequency_df)
-        freq.to_parquet(os.path.join(self.analysis_path, 'freqs.pqt'))
+        freq.write_parquet(os.path.join(self.analysis_path, 'freqs.pqt'))
         print(freq)
 
         freq_mean = df_sort_by_clusters(df_iterations_mean(freq, other_cols=['cluster']), value_cols=['frequency'])
-        freq_mean['frequency'] = freq_mean['frequency'] / 1000
-        freq_mean.to_parquet(os.path.join(self.analysis_path, 'freqs_mean.pqt'))
+        freq_mean = freq_mean.with_columns(pl.col('frequency') / 1000)
+        freq_mean.write_parquet(os.path.join(self.analysis_path, 'freqs_mean.pqt'))
         print(freq_mean)
 
         log.info('Computing frequency residency')
         freq_res = self.apply_analysis(tdfs.trace_frequency_residency_df)
-        freq_mean.to_parquet(os.path.join(self.analysis_path, 'freqs_residency.pqt'))
+        freq_mean.write_parquet(os.path.join(self.analysis_path, 'freqs_residency.pqt'))
         print(freq_res)
 
     def trace_overutilized_analysis(self):
         log.info('Collecting overutilized data')
-        overutil = self.apply_analysis(tdfs.trace_overutilized_df).reset_index(drop=True)
-        overutil.to_parquet(os.path.join(self.analysis_path, 'overutilized.pqt'))
+        overutil = self.apply_analysis(tdfs.trace_overutilized_df)
+        overutil.write_parquet(os.path.join(self.analysis_path, 'overutilized.pqt'))
         print(overutil)
 
-        overutil = overutil.groupby(['wa_path']).mean().reset_index()
-        overutil['metric'] = 'overutilized'
-        overutil = overutil[['metric', 'wa_path', 'time', 'total_time', 'percentage']]
-        overutil['percentage'] = round(overutil['percentage'], 2)
-        overutil['time'] = round(overutil['time'], 2)
-        overutil['total_time'] = round(overutil['total_time'], 2)
+        overutil = overutil.groupby(['wa_path']).mean().with_columns(
+            pl.lit('overutilized').alias('metric'),
+            pl.col('percentage').apply(lambda x: round(x, 2)),
+            pl.col('time').apply(lambda x: round(x, 2)),
+            pl.col('total_time').apply(lambda x: round(x, 2)),
+        )[['metric', 'wa_path', 'time', 'total_time', 'percentage']]
 
-        overutil.to_parquet(os.path.join(self.analysis_path, 'overutilized_mean.pqt'))
+        overutil.write_parquet(os.path.join(self.analysis_path, 'overutilized_mean.pqt'))
         print(overutil)
 
     def trace_sched_pelt_cfs_analysis(self):
         log.info('Collecting sched_pelt_cfs data')
         pelt = self.apply_analysis(tdfs.trace_sched_pelt_cfs_df)
-        pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs.pqt'))
+        pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs.pqt'))
         print(pelt)
 
-        pelt = pelt.query("path == '/'")
-        pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_root.pqt'))
+        pelt = pelt.filter(pl.col('path') == '/')
+        pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_root.pqt'))
         print(pelt)
 
         pelt = df_iterations_mean(pelt[['cluster', 'load', 'util', 'iteration', 'wa_path', 'kernel']],
-                                  other_cols=['cluster']).sort_values(by=['wa_path', 'iteration'])
-        pelt.to_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_mean.pqt'))
+                                  other_cols=['cluster']).sort(['wa_path', 'iteration'])
+        pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_mean.pqt'))
         print(pelt)
 
     def trace_tasks_residency_time_analysis(self):
         log.info('Collecting task residency data')
         tasks = self.apply_analysis(tdfs.trace_tasks_residency_time_df)
-        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency.pqt'))
+        tasks.write_parquet(os.path.join(self.analysis_path, 'tasks_residency.pqt'))
         print(tasks)
 
-        tasks = tasks.groupby(['wa_path', 'kernel', 'iteration', "comm"]).sum().sort_values(
-            by='Total', ascending=False
-        ).reset_index()
-        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_total.pqt'))
+        tasks = tasks.groupby(['wa_path', 'kernel', 'iteration', "comm"]).sum().sort('Total', descending=True)
+        tasks.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_total.pqt'))
         print(tasks)
 
-        tasks = tasks.query("not comm.str.startswith('swapper')")
-        tasks = tasks.groupby(['wa_path', 'kernel', 'iteration']).sum().reset_index()
-        tasks.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cpu_total.pqt'))
+        tasks = tasks.filter(pl.col('comm').str.starts_with('swapper').is_not()).groupby(
+            ['wa_path', 'kernel', 'iteration']
+        ).sum()
+        tasks.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cpu_total.pqt'))
         print(tasks)
 
     def adpf_analysis(self):
         log.info('Collecting ADPF report data')
 
         def report_to_df(path, iteration):
-            df = pd.read_csv(path).rename(
-                columns={'time since start': 'time'}
-            ).set_index('time')
-
-            df['iteration'] = iteration
-            return df
+            report = pl.read_csv(path).rename({'time since start': 'time'})
+            return report.with_columns([pl.lit(iteration).alias('iteration')] + [
+                pl.col(c).cast(pl.Float64) for c in report.columns
+            ])
 
         reports = [
             report_to_df(job.get_artifact_path('adpf'), job.iteration)
             for job in self.wa_output.jobs
         ]
 
-        reports = df_add_wa_output_tags(pd.concat(reports), self.wa_output)
-        reports.to_parquet(os.path.join(self.analysis_path, 'adpf.pqt'))
+        reports = df_add_wa_output_tags(pl.concat(reports), self.wa_output)
+        reports.write_parquet(os.path.join(self.analysis_path, 'adpf.pqt'))
         print(reports)
 
         aggregates = reports[['# frame count', 'average fps', 'iteration', 'kernel', 'wa_path']]
-        report_aggs = df_iterations_mean(aggregates)[['average fps', 'iteration', 'kernel', 'wa_path']]
-        report_aggs['frame count'] = aggregates.groupby([
-            'wa_path', 'kernel', 'iteration'
-        ]).apply(lambda p: p['# frame count'].iloc[-1]).reset_index()[0]
-        report_aggs = report_aggs[['average fps', 'frame count', 'iteration', 'kernel', 'wa_path']]
+        report_aggs = df_iterations_mean(aggregates).with_columns(
+            pl.lit(aggregates.groupby(['wa_path', 'kernel', 'iteration']).tail(1)['# frame count']).alias(
+                'frame count'
+            )
+        )[['average fps', 'frame count', 'iteration', 'kernel', 'wa_path']]
 
-        report_aggs.to_parquet(os.path.join(self.analysis_path, 'adpf_totals.pqt'))
+        report_aggs.write_parquet(os.path.join(self.analysis_path, 'adpf_totals.pqt'))
         print(report_aggs)
 
     def thermal_analysis(self):
         log.info('Collecting thermal data')
 
-        def process_thermal(df, iteration):
-            df['iteration'] = iteration
-            return df
-
-        thermals = df_add_wa_output_tags(pd.concat([
-            process_thermal(pd.read_csv(job.get_artifact_path('poller-output')), job.iteration)
+        thermals = df_add_wa_output_tags(pl.concat([
+            pl.read_csv(job.get_artifact_path('poller-output')).with_columns(pl.lit(job.iteration).alias('iteration'))
             for job in self.wa_output.jobs
-        ]), self.wa_output).sort_values(by=['iteration']).reset_index(drop=True).rename(
-            columns={"thermal_zone0-temp": "big",
-                     "thermal_zone1-temp": "mid",
-                     "thermal_zone2-temp": "little",
-                     "time": "Time"}
-        ).set_index('Time')
+        ]), self.wa_output).sort('iteration').rename({
+            "thermal_zone0-temp": "big",
+            "thermal_zone1-temp": "mid",
+            "thermal_zone2-temp": "little",
+            "time": "Time"
+        })
 
-        thermals.to_parquet(os.path.join(self.analysis_path, 'thermal.pqt'))
+        thermals.write_parquet(os.path.join(self.analysis_path, 'thermal.pqt'))
         print(thermals)
-
-    def trace_cgroup_attach_task_analysis(self):
-        log.info('Collecting cgroup_attach_task events')
-        df = self.apply_analysis(tdfs.trace_cgroup_attach_task_df)
-        df.to_parquet(os.path.join(self.analysis_path, 'cgroup_attach_task.pqt'))
-        print(df)
 
     def trace_wakeup_latency_analysis(self):
         log.info('Collecting task wakeup latencies')
@@ -313,14 +302,14 @@ class WorkloadProcessor:
             return
         df = self.apply_analysis(label_to_analysis[label])
 
-        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency.pqt'))
         print(df)
 
-        df = df.query("not comm.str.startswith('Hw')")
+        df = df.filter(pl.col('comm').str.starts_with('Hw').is_not())
         df = df_iterations_mean(df, other_cols=['comm'])
         df = df[['wa_path', 'iteration', 'comm', 'wakeup_latency']]
-        df = df.sort_values(by=['iteration', 'wa_path', 'comm'], ascending=[True, True, True])
-        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency_mean.pqt'))
+        df = df.sort(['iteration', 'wa_path', 'comm'], descending=[False, False, False])
+        df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_mean.pqt'))
         print(df)
 
     def trace_tasks_activations_analysis(self):
@@ -339,52 +328,59 @@ class WorkloadProcessor:
             return
         df = self.apply_analysis(label_to_analysis[label])
 
-        df.to_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
+        print(df)
+
+    def trace_cgroup_attach_task_analysis(self):
+        log.info('Collecting cgroup_attach_task events')
+        df = self.apply_analysis(tdfs.trace_cgroup_attach_task_df)
+        df.write_parquet(os.path.join(self.analysis_path, 'cgroup_attach_task.pqt'))
         print(df)
 
     def trace_wakeup_latency_cgroup_analysis(self):
         log.info('Collecting per-cgroup task wakeup latency')
         df = self.apply_analysis(tdfs.trace_wakeup_latency_cgroup_df)
-        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup.pqt'))
         print(df)
 
-        df = df_iterations_mean(df, other_cols=['cgroup'])
+        df = df.groupby(['wa_path', 'kernel', 'iteration', 'cgroup'], maintain_order=True).mean()
         df = df[['wa_path', 'iteration', 'cgroup', 'wakeup_latency']]
-        df = df.sort_values(by=['iteration', 'wa_path', 'cgroup'], ascending=[True, True, True])
+        df = df.sort(['iteration', 'wa_path', 'cgroup'], descending=False)
 
-        df.to_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup_mean.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup_mean.pqt'))
         print(df)
 
     def trace_tasks_residency_cgroup_analysis(self):
         log.info('Collecting per-cgroup tasks residency')
         df = self.apply_analysis(tdfs.trace_tasks_residency_cgroup_df)
-        df.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup.pqt'))
         print(df)
 
-        df = df.groupby(["wa_path", "cgroup", "iteration"]).sum().reset_index().sort_values(
-            by=['iteration', 'wa_path', 'cgroup', 'Total'], ascending=[True, True, True, False]
+        df = df.groupby(["wa_path", "cgroup", "iteration"]).sum().sort(
+            ['iteration', 'wa_path', 'cgroup', 'Total'], descending=[False, False, False, True]
         )
 
-        df.to_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup_total.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup_total.pqt'))
         print(df)
 
     def trace_uclamp_analysis(self):
         log.info('Collecting uclamp data')
         df = self.apply_analysis(tdfs.trace_uclamp_df)
 
-        df.to_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
         print(df)
 
     def trace_perf_event_analysis(self):
         log.info('Collecting perf counter event data')
         df = self.apply_analysis(tdfs.trace_perf_counters_df)
 
-        df.to_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
+        log.debug('Saving the perf counter event analysis file')
+        df.write_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
         print(df)
 
     def trace_capacity_analysis(self):
         log.info('Collecting capacity data')
         df = self.apply_analysis(tdfs.trace_capacity_df)
 
-        df.to_parquet(os.path.join(self.analysis_path, 'capacity.pqt'))
+        df.write_parquet(os.path.join(self.analysis_path, 'capacity.pqt'))
         print(df)
