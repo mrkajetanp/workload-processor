@@ -48,5 +48,8 @@ config:
             'cpu-clock',
             'task-clock',
           ]
+        device_config:
+          load_default_modules: false
+          modules: null
 workloads:
         - name: jankbench
