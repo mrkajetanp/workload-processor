@@ -53,4 +53,4 @@ config:
 workloads:
         - name: geekbench
           params:
-            version: 5
+            version: 6
