@@ -22,16 +22,16 @@ All of the parts can easily function separately but they are desgined to make us
 Different parts of the tool use the below configuration options specified in config.yaml in the project root directory.
 
 * `plat_info` - Platform info used for some analysis metrics. Either use the one provided in `assets/` for Pixel 6 or generate one by modifying the provided script.
+* `target_conf` - Path to the device target config. Used to build the Lisa module with lisa-load-kmod.
 * `adb_host` & `adb_port` - Defaults should work, ADB access settings used by the `run` and `device` subcommands
-* `lisa_module_path` - Path to the Lisa module file on the target device, used by `run` before starting a workload
 
 ```
 target:
   plat_info: ~/power/pixel6/workload-processor/assets/p6-platform-info.yml
+  target_conf: ~/tools/lisa/target_conf_p6.yml
+host:
   adb_host: 127.0.0.1
   adb_port: 5037
-device:
-  lisa_module_path: /data/local/sched_tp.ko
 ```
 
 ### Entry points

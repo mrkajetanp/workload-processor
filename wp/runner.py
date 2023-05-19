@@ -16,7 +16,7 @@ class WorkloadRunner:
         self.config = load_yaml(CONFIG_PATH)
         self.output_dir = output_dir
         self.force = force
-        self.adb_client = AdbClient(host=self.config['target']['adb_host'], port=int(self.config['target']['adb_port']))
+        self.adb_client = AdbClient(host=self.config['host']['adb_host'], port=int(self.config['host']['adb_port']))
 
         try:
             self.device = self.adb_client.devices()[0]
@@ -31,9 +31,13 @@ class WorkloadRunner:
 
         # insert the lisa module
         if module:
-            module_path = self.config['device']['lisa_module_path']
-            log.debug(f'Inserting the lisa module with {module_path}')
-            print(self.device.shell(f"insmod {module_path}"))
+            target_conf_path = os.path.expanduser(self.config['target']['target_conf'])
+            log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
+            log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
+            cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', target_conf_path]
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+            for c in iter(lambda: process.stdout.read(1), b""):
+                sys.stdout.buffer.write(c)
 
     def run(self, workload, tag):
         if workload.endswith('yaml') or workload.endswith('yml'):

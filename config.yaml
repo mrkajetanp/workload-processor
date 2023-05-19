@@ -1,6 +1,6 @@
 target:
   plat_info: ~/power/pixel6/workload-processor/assets/p6-platform-info.yml
+  target_conf: ~/tools/lisa/target_conf_p6.yml
+host:
   adb_host: 127.0.0.1
   adb_port: 5037
-device:
-  lisa_module_path: "/data/local/sched_tp.ko generic_perf_events=cpu_cycles,inst_retired pmu_raw_counters=35,36"
