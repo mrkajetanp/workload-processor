@@ -1,6 +1,6 @@
 from pathlib import Path
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent.joinpath('config.yaml')
+APP_NAME = 'workload-processor'
 AGENDAS_PATH = Path(__file__).resolve().parent.parent.joinpath('agendas')
 
 FULL_METRICS = [

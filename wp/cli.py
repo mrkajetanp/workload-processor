@@ -1,11 +1,11 @@
 import os
 import argparse
 import logging as log
+import confuse
 
 from lisa.utils import setup_logging
 
-from wp.helpers import load_yaml
-from wp.constants import FULL_METRICS, CONFIG_PATH, DEVICE_COMMANDS
+from wp.constants import FULL_METRICS, APP_NAME, DEVICE_COMMANDS
 from wp.processor import WorkloadProcessor
 from wp.runner import WorkloadRunner
 from wp.device import WorkloadDevice
@@ -13,8 +13,8 @@ from wp.device import WorkloadDevice
 
 def process(args):
     # Load the config file
-    config = load_yaml(CONFIG_PATH)
-    plat_info_path = os.path.expanduser(config['target']['plat_info'])
+    config = confuse.Configuration(APP_NAME, __name__)
+    plat_info_path = os.path.expanduser(config['target']['plat_info'].get(str))
     processor = WorkloadProcessor(args.wa_path, init=args.init, plat_info_path=plat_info_path,
                                   no_parser=args.no_parser, validate=not args.skip_validation)
 
@@ -30,8 +30,8 @@ def run(args):
     output = runner.run(args.workload, args.tag)
 
     if args.auto_process and output is not None:
-        config = load_yaml(CONFIG_PATH)
-        plat_info_path = os.path.expanduser(config['target']['plat_info'])
+        config = confuse.Configuration(APP_NAME, __name__)
+        plat_info_path = os.path.expanduser(config['target']['plat_info'].get(str))
         processor = WorkloadProcessor(output, init=True, plat_info_path=plat_info_path, validate=True)
         processor.run_metrics(FULL_METRICS)
 

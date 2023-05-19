@@ -19,7 +19,8 @@ All of the parts can easily function separately but they are desgined to make us
 
 ### Configuration
 
-Different parts of the tool use the below configuration options specified in config.yaml in the project root directory.
+Different parts of the tool use the configuration options below.
+By default, the values in wp/config_default.yaml will be used. They can be overridden as-needed in ~/.config/workload-processor/config.yaml.
 
 * `plat_info` - Platform info used for some analysis metrics. Either use the one provided in `assets/` for Pixel 6 or generate one by modifying the provided script.
 * `target_conf` - Path to the device target config. Used to build the Lisa module with lisa-load-kmod.

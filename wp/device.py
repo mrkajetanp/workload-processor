@@ -1,15 +1,16 @@
 import time
 import logging as log
-
+import confuse
 from ppadb.client import Client as AdbClient
-from wp.constants import CONFIG_PATH
-from wp.helpers import load_yaml
+
+from wp.constants import APP_NAME
 
 
 class WorkloadDevice:
     def __init__(self):
-        self.config = load_yaml(CONFIG_PATH)
-        self.adb_client = AdbClient(host=self.config['host']['adb_host'], port=int(self.config['host']['adb_port']))
+        self.config = confuse.Configuration(APP_NAME, __name__)
+        self.adb_client = AdbClient(host=self.config['host']['adb_host'].get(str),
+                                    port=int(self.config['host']['adb_port'].get(int)))
         self.device = self.adb_client.devices()[0]
 
         log.debug('Restarting adb as root')

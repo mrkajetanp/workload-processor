@@ -2,21 +2,23 @@ import sys
 import os
 import subprocess
 import logging as log
+import confuse
 
 from datetime import date
 from ppadb.client import Client as AdbClient
 
 from devlib.exception import TargetStableError
 from wp.helpers import load_yaml
-from wp.constants import CONFIG_PATH, AGENDAS_PATH, SUPPORTED_WORKLOADS
+from wp.constants import AGENDAS_PATH, SUPPORTED_WORKLOADS, APP_NAME
 
 
 class WorkloadRunner:
     def __init__(self, output_dir, force=False, module=True):
-        self.config = load_yaml(CONFIG_PATH)
+        self.config = confuse.Configuration(APP_NAME, __name__)
         self.output_dir = output_dir
         self.force = force
-        self.adb_client = AdbClient(host=self.config['host']['adb_host'], port=int(self.config['host']['adb_port']))
+        self.adb_client = AdbClient(host=self.config['host']['adb_host'].get(str),
+                                    port=int(self.config['host']['adb_port'].get(int)))
 
         try:
             self.device = self.adb_client.devices()[0]
@@ -31,7 +33,7 @@ class WorkloadRunner:
 
         # insert the lisa module
         if module:
-            target_conf_path = os.path.expanduser(self.config['target']['target_conf'])
+            target_conf_path = os.path.expanduser(self.config['target']['target_conf'].get(str))
             log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
             log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
             cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', target_conf_path]
