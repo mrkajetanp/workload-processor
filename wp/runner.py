@@ -31,15 +31,23 @@ class WorkloadRunner:
         except RuntimeError:
             log.debug('adb already running as root')
 
+        if not module:
+            return
+
+        # check if the lisa module is loaded
+        module_present = bool(self.device.shell('lsmod | grep lisa'))
+        if module_present:
+            log.info('Lisa module already found on the target device')
+            return
+
         # insert the lisa module
-        if module:
-            target_conf_path = os.path.expanduser(self.config['target']['target_conf'].get(str))
-            log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
-            log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
-            cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', target_conf_path]
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-            for c in iter(lambda: process.stdout.read(1), b""):
-                sys.stdout.buffer.write(c)
+        target_conf_path = os.path.expanduser(self.config['target']['target_conf'].get(str))
+        log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
+        log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
+        cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', target_conf_path]
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        for c in iter(lambda: process.stdout.read(1), b""):
+            sys.stdout.buffer.write(c)
 
     def run(self, workload, tag):
         if workload.endswith('yaml') or workload.endswith('yml'):
