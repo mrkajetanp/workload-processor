@@ -47,6 +47,8 @@ class WorkloadDevice:
 
     def status(self):
         log.info('Showing current device status')
+        kernel_version = self.device.shell("uname -a").strip().split()[2]
+        log.info(f'Kernel version {kernel_version}')
         big_temp = self.device.shell("cat /sys/class/thermal/thermal_zone0/temp").strip()
         mid_temp = self.device.shell("cat /sys/class/thermal/thermal_zone1/temp").strip()
         ltl_temp = self.device.shell("cat /sys/class/thermal/thermal_zone2/temp").strip()
