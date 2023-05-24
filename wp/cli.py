@@ -16,7 +16,8 @@ def process(args):
     config = confuse.Configuration(APP_NAME, __name__)
     plat_info_path = os.path.expanduser(config['target']['plat_info'].get(str))
     processor = WorkloadProcessor(args.wa_path, init=args.init, plat_info_path=plat_info_path,
-                                  no_parser=args.no_parser, validate=not args.skip_validation)
+                                  no_parser=args.no_parser, validate=not args.skip_validation,
+                                  allow_missing=args.allow_missing)
 
     metrics = args.metrics if args.metrics else FULL_METRICS
     if not args.no_metrics:
@@ -60,6 +61,7 @@ def main():
     process_group_metric.add_argument('-m', '--metrics', nargs='+', choices=FULL_METRICS,
                                       help='Metrics to process, defaults to all.')
     process_group_metric.add_argument('--no-metrics', action='store_true', help="Do not process metrics")
+    parser_process.add_argument('-a', '--allow-missing', action='store_true', help="Allow missing trace events")
     parser_process.set_defaults(func=process)
 
     parser_run = subparsers.add_parser('run', help='Run a workload')

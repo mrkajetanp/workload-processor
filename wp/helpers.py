@@ -35,13 +35,21 @@ def df_iterations_mean(df, other_cols=None):
     )
 
 
-def traces_analysis(traces, trace_to_df):
+# TODO: probably fold into the processor
+def traces_analysis(traces, trace_to_df, allow_missing):
     def analyse_iteration(trace, iteration):
         log.debug(f'Processing iteration {iteration} from {trace.trace_path} with {trace_to_df.__name__}')
-        return trace_to_df(trace).with_columns(pl.lit(iteration).alias('iteration'))
+        try:
+            return trace_to_df(trace).with_columns(pl.lit(iteration).alias('iteration'))
+        except Exception as e:
+            log.error(f'Processing iteration {iteration} failed with {e}')
+            if allow_missing:
+                return None
+            raise e
 
     log.debug(f'Creating trace analysis dfs using {trace_to_df.__name__}')
-    return pl.concat([analyse_iteration(trace, iteration) for iteration, trace in traces.items()])
+    dfs = [analyse_iteration(trace, iteration) for iteration, trace in traces.items()]
+    return pl.concat([df for df in dfs if df is not None])
 
 
 def df_add_wa_output_tags(df, out):
@@ -66,7 +74,7 @@ def wa_output_to_mock_traces(wa_output, plat_info=None):
         try:
             pl.read_parquet(file)
             return True
-        except (pyarrow.lib.ArrowInvalid, OSError) as e:
+        except Exception as e:
             log.error(f"{e} (reading {file})")
             return False
 

@@ -16,8 +16,14 @@ from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations
 
 
 class WorkloadProcessor:
-    def __init__(self, output_path, init=False, plat_info_path=None, no_parser=False, validate=True):
+    def __init__(self, output_path, init=False, plat_info_path=None,
+                 no_parser=False, validate=True, allow_missing=False):
         pl.toggle_string_cache(True)
+        pl.Config.set_tbl_formatting('ASCII_MARKDOWN')
+        pl.Config.set_tbl_hide_column_data_types(True)
+        pl.Config.set_tbl_rows(10)
+
+        self.allow_missing = allow_missing
 
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"WA output path '{output_path}' not found.")
@@ -132,7 +138,7 @@ class WorkloadProcessor:
 
     def apply_analysis(self, trace_to_df):
         log.debug(f'Applying analysis {trace_to_df.__name__}')
-        return df_add_wa_output_tags(traces_analysis(self.traces, trace_to_df), self.wa_output)
+        return df_add_wa_output_tags(traces_analysis(self.traces, trace_to_df, self.allow_missing), self.wa_output)
 
     def trace_pixel6_emeter_analysis(self):
         log.info('Collecting data from pixel6_emeter')
