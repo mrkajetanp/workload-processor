@@ -246,10 +246,8 @@ class WorkloadProcessor:
         log.info('Collecting ADPF report data')
 
         def report_to_df(path, iteration):
-            report = pl.read_csv(path).rename({'time since start': 'time'})
-            return report.with_columns([pl.lit(iteration).alias('iteration')] + [
-                pl.col(c).cast(pl.Float64) for c in report.columns
-            ])
+            report = pl.read_csv(path, dtypes=[pl.Float64]*39).rename({'time since start': 'time'})
+            return report.with_columns([pl.lit(iteration).alias('iteration')])
 
         reports = [
             report_to_df(job.get_artifact_path('adpf'), job.iteration)
