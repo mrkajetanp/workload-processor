@@ -14,4 +14,4 @@ FULL_METRICS = [
 SUPPORTED_WORKLOADS = ['drarm', 'geekbench', 'jankbench', 'speedometer']
 
 DEVICE_COMMANDS = ['status', 'disable-cpusets', 'disable-cpushares', 'menu', 'teo', 'latency-sensitive', 'powersave',
-                   'performance', 'schedutil', 'sugov-rate-limit']
+                   'performance', 'schedutil', 'sugov-rate-limit', 'reload-module']

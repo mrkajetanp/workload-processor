@@ -21,7 +21,9 @@ class WorkloadDevice:
             log.debug(e)
 
         # Give ADB on device a moment to initialise
-        time.sleep(2)
+        time.sleep(3)
+
+        self.device.shell("setenforce 0")
 
     def dispatch(self, command):
         cmd_to_function = {
@@ -35,6 +37,7 @@ class WorkloadDevice:
             'performance': self.performance,
             'schedutil': self.schedutil,
             'sugov-rate-limit': self.sugov_rate_limit,
+            'reload-module': self.reload_module,
         }
 
         try:
@@ -49,6 +52,13 @@ class WorkloadDevice:
         log.info('Showing current device status')
         kernel_version = self.device.shell("uname -a").strip().split()[2]
         log.info(f'Kernel version {kernel_version}')
+
+        selinux = self.device.shell("getenforce").strip()
+        log.info(f'SELinux status: {selinux}')
+
+        module_present = bool(self.device.shell('lsmod | grep lisa'))
+        log.info(f"Lisa module {'' if module_present else 'not '}loaded")
+
         big_temp = self.device.shell("cat /sys/class/thermal/thermal_zone0/temp").strip()
         mid_temp = self.device.shell("cat /sys/class/thermal/thermal_zone1/temp").strip()
         ltl_temp = self.device.shell("cat /sys/class/thermal/thermal_zone2/temp").strip()
@@ -84,6 +94,12 @@ class WorkloadDevice:
             pol_4_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy4/schedutil/rate_limit_us").strip()
             pol_6_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy6/schedutil/rate_limit_us").strip()
             log.info(f"policy rate limits: 0: {pol_0_rl}, 4: {pol_4_rl}, 6: {pol_6_rl}")
+
+    def reload_module(self):
+        log.info('Reloading the Lisa module from local copy')
+        self.device.shell("rmmod lisa")
+        module_path = self.config['device']['lisa_module_path'].get()
+        self.device.shell(f"insmod {module_path}")
 
     def disable_cpusets(self):
         log.info('Disabling cpusets for groups background, foreground, system-background and restricted')
