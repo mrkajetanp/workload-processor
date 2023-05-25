@@ -2,6 +2,7 @@ import os
 import subprocess
 import shutil
 import time
+import confuse
 import logging as log
 import polars as pl
 
@@ -11,19 +12,19 @@ from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
 
 from wp import trace_to_dfs as tdfs
+from wp.constants import APP_NAME
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, traces_analysis
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
 
 
 class WorkloadProcessor:
-    def __init__(self, output_path, init=False, plat_info_path=None,
-                 no_parser=False, validate=True, allow_missing=False):
+    def __init__(self, output_path, config=None):
+        self.config = confuse.Configuration(APP_NAME, __name__) if config is None else config
+
         pl.toggle_string_cache(True)
         pl.Config.set_tbl_formatting('ASCII_MARKDOWN')
         pl.Config.set_tbl_hide_column_data_types(True)
         pl.Config.set_tbl_rows(10)
-
-        self.allow_missing = allow_missing
 
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"WA output path '{output_path}' not found.")
@@ -38,17 +39,22 @@ class WorkloadProcessor:
             log.debug('analysis directory exists, files might be overwritten')
 
         self.plat_info = None
+        plat_info_path = os.path.expanduser(self.config['target']['plat_info'].get(str))
         if plat_info_path is not None:
             self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
 
         trace_parquet_found = shutil.which('trace-parquet') is not None
+        no_parser = self.config['no_parser'].get(False)
+        init = self.config['init'].get(False)
 
         # Initialise traces
         if (trace_parquet_found and not no_parser) and (init or self.needs_init()):
-            if validate:
+            if not self.config['skip_validation'].get(False):
                 self.validate_traces()
             log.info('Parsing and initialising traces..')
             self.init_traces()
+
+        self.allow_missing = self.config['allow_missing'].get(False)
 
         # Trace parquet not found or fallback requested
         traces_start = time.time()
