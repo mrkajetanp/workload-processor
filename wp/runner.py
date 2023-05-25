@@ -13,10 +13,10 @@ from wp.constants import AGENDAS_PATH, SUPPORTED_WORKLOADS, APP_NAME
 
 
 class WorkloadRunner:
-    def __init__(self, output_dir, force=False, module=True):
-        self.config = confuse.Configuration(APP_NAME, __name__)
+    def __init__(self, output_dir, config=None):
+        self.config = confuse.Configuration(APP_NAME, __name__) if config is None else config
         self.output_dir = output_dir
-        self.force = force
+        self.force = self.config['force'].get(False)
         self.adb_client = AdbClient(host=self.config['host']['adb_host'].get(str),
                                     port=int(self.config['host']['adb_port'].get(int)))
 
@@ -31,13 +31,13 @@ class WorkloadRunner:
         except RuntimeError:
             log.debug('adb already running as root')
 
-        if not module:
+        if self.config['no_module'].get(False):
             return
 
         # check if the lisa module is loaded
         module_present = bool(self.device.shell('lsmod | grep lisa'))
         if module_present:
-            log.info('Lisa module already found on the target device')
+            log.info('Lisa module found on the target device')
             return
 
         # insert the lisa module

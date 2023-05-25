@@ -12,7 +12,6 @@ from wp.device import WorkloadDevice
 
 
 def process(args):
-    # Load the config file
     config = confuse.Configuration(APP_NAME, __name__)
     config.set_args(args)
     processor = WorkloadProcessor(args.wa_path, config=config)
@@ -25,7 +24,9 @@ def process(args):
 
 
 def run(args):
-    runner = WorkloadRunner(args.dir, force=args.force, module=not args.no_module)
+    config = confuse.Configuration(APP_NAME, __name__)
+    config.set_args(args)
+    runner = WorkloadRunner(args.dir, config=config)
     output = runner.run(args.workload, args.tag)
 
     if args.auto_process and output is not None:
