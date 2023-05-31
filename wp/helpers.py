@@ -120,7 +120,10 @@ def convert_event_pqt(pqt):
 
 
 def pqs_to_trace(pqs):
-    events = {name: convert_event_pqt(pq) for (name, pq) in pqs.items()}
+    def trim_event_name(name):
+        return name[6:] if name.startswith('lisa__') else name
+
+    events = {trim_event_name(name): convert_event_pqt(pq) for (name, pq) in pqs.items()}
     return Trace(parser=MockTraceParser(events))
 
 
