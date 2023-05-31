@@ -20,9 +20,9 @@ config:
                   'cpu_idle',
                   'cpu_idle_miss',
                   'cgroup_attach_task',
-                  'pixel6_emeter',
-                  'sched_pelt_cfs',
-                  'sched_overutilized',
+                  'lisa__pixel6_emeter',
+                  'lisa__sched_pelt_cfs',
+                  'lisa__sched_overutilized',
                 ]
                 buffer_size: 184350
                 report: false

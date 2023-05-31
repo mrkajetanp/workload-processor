@@ -19,10 +19,10 @@ config:
                   'thermal_exynos*',
                   'cpu_idle',
                   'cpu_idle_miss',
-                  'pixel6_emeter',
                   'cgroup_attach_task',
-                  'sched_pelt_cfs',
-                  'sched_overutilized',
+                  'lisa__pixel6_emeter',
+                  'lisa__sched_pelt_cfs',
+                  'lisa__sched_overutilized',
                 ]
                 buffer_size: 184350
                 report: false
