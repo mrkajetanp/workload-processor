@@ -18,7 +18,7 @@ class WorkloadDevice:
             self.device.root()
             log.info('ADB restarted as root')
         except RuntimeError as e:
-            log.debug(e)
+            log.error(e)
 
         # Give ADB on device a moment to initialise
         time.sleep(3)

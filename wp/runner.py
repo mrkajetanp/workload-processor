@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 import subprocess
 import logging as log
 import confuse
@@ -28,8 +29,11 @@ class WorkloadRunner:
         log.debug('Restarting adb as root')
         try:
             print(self.device.root())
-        except RuntimeError:
-            log.debug('adb already running as root')
+        except RuntimeError as e:
+            log.error(e)
+
+        # Give ADB on device a moment to initialise
+        time.sleep(3)
 
         if self.config['no_module'].get(False):
             return
