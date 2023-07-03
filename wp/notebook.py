@@ -119,7 +119,7 @@ class WorkloadNotebookAnalysis:
         self.analysis[name.split('.')[0]] = result
 
     def plot_gmean_bars(self, df, x='stat', y='value', facet_col='metric', facet_col_wrap=3, title='',
-                        width=800, height=600, gmean_round=1, include_columns=[], table_sort=None,
+                        width=None, height=600, gmean_round=1, include_columns=[], table_sort=None,
                         order_cluster=False, sort_ascending=False, include_total=False, debug=False):
 
         shown_clusters = self.CLUSTERS if not include_total else self.CLUSTERS_TOTAL
@@ -198,6 +198,6 @@ class WorkloadNotebookAnalysis:
         fig.update_yaxes(matches=None)
         if sort_ascending:
             fig.update_xaxes(categoryorder='total ascending')
-        fig.show()
+        fig.show(renderer='iframe')
 
         return data_table
