@@ -341,6 +341,16 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
         print(df)
 
+        df = df.filter(pl.col('active') == 1).groupby(['kernel', 'wa_path', 'iteration', 'cpu', 'comm']).agg(
+            pl.col('duration').count().alias('count'), pl.col('duration').sum().alias('duration')
+        ).with_columns(
+            pl.col('cpu').apply(lambda cpu: 'little' if cpu < 4 else 'big' if cpu > 5 else 'mid').alias('cluster')
+        )[['kernel', 'wa_path', 'iteration', 'cpu', 'cluster', 'comm', 'count', 'duration']]
+
+        df.write_parquet(os.path.join(self.analysis_path, 'task_activations_stats.pqt'))
+        print(df)
+
+
     def trace_cgroup_attach_task_analysis(self):
         log.info('Collecting cgroup_attach_task events')
         df = self.apply_analysis(tdfs.trace_cgroup_attach_task_df)
