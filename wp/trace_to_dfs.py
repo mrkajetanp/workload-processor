@@ -1,7 +1,11 @@
 import polars as pl
 import logging as log
+import confuse
+
 import lisa
 from lisa.trace import TaskID
+
+from wp.constants import APP_NAME
 from wp.helpers import df_add_cluster, flatten, trim_task_comm
 
 # TODO: pull this from platform info instead
@@ -98,6 +102,8 @@ def trace_tasks_residency_time_df(trace):
 
 
 def trace_task_wakeup_latency_df(trace, tasks):
+    tasks = [trace.get_task_ids(task) for task in tasks]
+
     def task_latency(pid, comm):
         try:
             return pl.from_pandas(trace.ana.latency.df_latency_wakeup((pid, comm)).reset_index()).with_columns(
@@ -111,67 +117,33 @@ def trace_task_wakeup_latency_df(trace, tasks):
 
 
 def trace_wakeup_latency_drarm_df(trace):
-    tasks = [
-        trace.get_task_ids('UnityMain'),
-        trace.get_task_ids('UnityGfxDeviceW'),
-        trace.get_task_ids('Thread-7'),
-        trace.get_task_ids('Thread-5'),
-        trace.get_task_ids('Thread-6'),
-        trace.get_task_ids('Thread-4'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('mali-cmar-backe'),
-        trace.get_task_ids('mali_jd_thread'),
-        trace.get_task_ids('writer'),
-        trace.get_task_ids('FastMixer'),
-        trace.get_task_ids('RenderEngine'),
-        trace.get_task_ids('Audio Mixer Thr'),
-        trace.get_task_ids('UnityChoreograp'),
-    ] + [
-        trace.get_task_ids(task)
-        for task in flatten(trace.get_tasks().values())
-        if 'HwBinder' in task
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['drarm'].get() + [
+        task for task in flatten(trace.get_tasks().values()) if 'HwBinder' in task
     ]
-
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_jankbench_df(trace):
-    tasks = [
-        trace.get_task_ids('RenderThread'),
-        trace.get_task_ids('droid.benchmark'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('decon0_kthread'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['jankbench'].get()
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_geekbench_df(trace):
-    tasks = [
-        trace.get_task_ids('AsyncTask #1'),
-        trace.get_task_ids('labs.geekbench5'),
-        trace.get_task_ids('surfaceflinger'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['geekbench'].get()
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_wakeup_latency_speedometer_df(trace):
-    tasks = [
-        trace.get_task_ids('CrRendererMain'),
-        trace.get_task_ids('ThreadPoolForeg'),
-        trace.get_task_ids('.android.chrome'),
-        trace.get_task_ids('CrGpuMain'),
-        trace.get_task_ids('Compositor'),
-        trace.get_task_ids('Chrome_IOThread'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('RenderThread'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['speedometer'].get()
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
 def trace_task_activations_df(trace, tasks):
+    tasks = [trace.get_task_ids(task) for task in tasks]
     return pl.concat([
         pl.from_pandas(trace.ana.tasks.df_task_activation((pid, comm))).with_columns(
             pl.col('active', 'duration', 'duty_cycle').cast(pl.Float64),
@@ -182,64 +154,32 @@ def trace_task_activations_df(trace, tasks):
     ])
 
 
+# TODO: refactor these somehow
 def trace_tasks_activations_drarm_df(trace):
-    tasks = [
-        trace.get_task_ids('UnityMain'),
-        trace.get_task_ids('UnityGfxDeviceW'),
-        trace.get_task_ids('Thread-7'),
-        trace.get_task_ids('Thread-5'),
-        trace.get_task_ids('Thread-6'),
-        trace.get_task_ids('Thread-4'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('mali-cmar-backe'),
-        trace.get_task_ids('mali_jd_thread'),
-        trace.get_task_ids('writer'),
-        trace.get_task_ids('FastMixer'),
-        trace.get_task_ids('RenderEngine'),
-        trace.get_task_ids('Audio Mixer Thr'),
-        trace.get_task_ids('UnityChoreograp'),
-    ] + [
-        trace.get_task_ids(task)
-        for task in flatten(trace.get_tasks().values())
-        if 'HwBinder' in task
+    config = confuse.Configuration(APP_NAME, __name__)
+
+    tasks = config['processor']['important_tasks']['drarm'].get() + [
+        task for task in flatten(trace.get_tasks().values()) if 'HwBinder' in task
     ]
 
     return trace_task_activations_df(trace, tasks)
 
 
 def trace_tasks_activations_jankbench_df(trace):
-    tasks = [
-        trace.get_task_ids('RenderThread'),
-        trace.get_task_ids('droid.benchmark'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('decon0_kthread'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['jankbench'].get()
     return trace_task_activations_df(trace, tasks)
 
 
 def trace_tasks_activations_geekbench_df(trace):
-    tasks = [
-        trace.get_task_ids('AsyncTask #1'),
-        trace.get_task_ids('labs.geekbench5'),
-        trace.get_task_ids('surfaceflinger'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['geekbench'].get()
     return trace_task_activations_df(trace, tasks)
 
 
 def trace_tasks_activations_speedometer_df(trace):
-    tasks = [
-        trace.get_task_ids('CrRendererMain'),
-        trace.get_task_ids('ThreadPoolForeg'),
-        trace.get_task_ids('.android.chrome'),
-        trace.get_task_ids('CrGpuMain'),
-        trace.get_task_ids('Compositor'),
-        trace.get_task_ids('Chrome_IOThread'),
-        trace.get_task_ids('surfaceflinger'),
-        trace.get_task_ids('RenderThread'),
-    ]
-
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['speedometer'].get()
     return trace_task_activations_df(trace, tasks)
 
 

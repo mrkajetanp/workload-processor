@@ -6,3 +6,20 @@ host:
   adb_port: 5037
 device:
   lisa_module_path: /data/local/lisa.ko
+processor:
+  important_tasks:
+    drarm: [
+      'UnityMain', 'UnityGfxDeviceW', 'Thread-7', 'Thread-6', 'Thread-5', 'Thread-4',
+      'surfaceflinger', 'mali-cmar-backe', 'mali_jd_thread', 'writer', 'FastMixer',
+      'RenderEngine', 'Audio Mixer Thr', 'UnityChoreograp',
+    ]
+    jankbench: [
+      'RenderThread', 'droid.benchmark', 'surfaceflinger', 'decon0_kthread',
+    ]
+    geekbench: [
+      'AsyncTask #1', 'labs.geekbench5', 'surfaceflinger',
+    ]
+    speedometer: [
+      'CrRendererMain', 'ThreadPoolForeg', '.android.chrome', 'CrGpuMain', 'Compositor',
+      'Chrome_IOThread', 'surfaceflinger', 'RenderThread',
+    ]

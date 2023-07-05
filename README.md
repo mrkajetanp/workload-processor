@@ -35,6 +35,11 @@ host:
   adb_port: 5037
 ```
 
+Additionally, the following things can be configured in the same way:
+* important tasks for each workload to be selected in analysis
+
+Consult wp/config_default.yaml for the complete set of overrideable options.
+
 ### Entry points
 
 The main entry point to the project is through the command line (installed as `workload-processor` into the Lisa PATH using the instructions above).
