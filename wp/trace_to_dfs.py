@@ -118,9 +118,7 @@ def trace_task_wakeup_latency_df(trace, tasks):
 
 def trace_wakeup_latency_drarm_df(trace):
     config = confuse.Configuration(APP_NAME, __name__)
-    tasks = config['processor']['important_tasks']['drarm'].get() + [
-        task for task in flatten(trace.get_tasks().values()) if 'HwBinder' in task
-    ]
+    tasks = config['processor']['important_tasks']['drarm'].get()
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
