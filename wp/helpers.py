@@ -3,8 +3,9 @@ import yaml
 import pyarrow
 import logging as log
 import polars as pl
+
 from lisa.trace import Trace, MockTraceParser
-from lisa.datautils import series_mean
+from lisa.datautils import series_mean, df_update_duplicates
 
 
 def load_yaml(path):
@@ -116,7 +117,7 @@ def convert_event_pqt(pqt):
         'common_cpu': '__cpu', 'common_pid': '__pid',
         'common_comm': '__comm', 'common_ts': 'Time'
     }).with_columns(pl.col('Time') / 1000000000)
-    return pqt.to_pandas().set_index('Time')
+    return df_update_duplicates(pqt.to_pandas().set_index('Time')).sort_index()
 
 
 def pqs_to_trace(pqs):
