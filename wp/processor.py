@@ -301,9 +301,10 @@ class WorkloadProcessor:
 
         label_to_analysis = {
             'jankbench': tdfs.trace_wakeup_latency_jankbench_df,
-            'drarm': tdfs.trace_wakeup_latency_drarm_df,
             'geekbench': tdfs.trace_wakeup_latency_geekbench_df,
             'speedometer': tdfs.trace_wakeup_latency_speedometer_df,
+            'drarm': tdfs.trace_wakeup_latency_drarm_df,
+            'fortnite': tdfs.trace_wakeup_latency_fortnite_df,
         }
 
         label = self.wa_output.jobs[0].label
@@ -327,9 +328,10 @@ class WorkloadProcessor:
 
         label_to_analysis = {
             'jankbench': tdfs.trace_tasks_activations_jankbench_df,
-            'drarm': tdfs.trace_tasks_activations_drarm_df,
             'geekbench': tdfs.trace_tasks_activations_geekbench_df,
             'speedometer': tdfs.trace_tasks_activations_speedometer_df,
+            'drarm': tdfs.trace_tasks_activations_drarm_df,
+            'fortnite': tdfs.trace_tasks_activations_fortnite_df,
         }
 
         label = self.wa_output.jobs[0].label

@@ -124,6 +124,12 @@ def trace_wakeup_latency_drarm_df(trace):
     return trace_task_wakeup_latency_df(trace, tasks)
 
 
+def trace_wakeup_latency_fortnite_df(trace):
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['fortnite'].get()
+    return trace_task_wakeup_latency_df(trace, tasks)
+
+
 def trace_wakeup_latency_jankbench_df(trace):
     config = confuse.Configuration(APP_NAME, __name__)
     tasks = config['processor']['important_tasks']['jankbench'].get()
@@ -154,7 +160,6 @@ def trace_task_activations_df(trace, tasks):
     ])
 
 
-# TODO: refactor these somehow
 def trace_tasks_activations_drarm_df(trace):
     config = confuse.Configuration(APP_NAME, __name__)
 
@@ -162,6 +167,12 @@ def trace_tasks_activations_drarm_df(trace):
         task for task in flatten(trace.get_tasks().values()) if 'HwBinder' in task
     ]
 
+    return trace_task_activations_df(trace, tasks)
+
+
+def trace_tasks_activations_fortnite_df(trace):
+    config = confuse.Configuration(APP_NAME, __name__)
+    tasks = config['processor']['important_tasks']['fortnite'].get()
     return trace_task_activations_df(trace, tasks)
 
 

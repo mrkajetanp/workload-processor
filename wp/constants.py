@@ -11,7 +11,7 @@ FULL_METRICS = [
     'energy-estimate',
 ]
 
-SUPPORTED_WORKLOADS = ['drarm', 'geekbench', 'jankbench', 'speedometer']
+SUPPORTED_WORKLOADS = ['geekbench', 'jankbench', 'speedometer', 'drarm', 'fortnite']
 
 DEVICE_COMMANDS = ['status', 'disable-cpusets', 'disable-cpushares', 'menu', 'teo', 'latency-sensitive', 'powersave',
                    'performance', 'schedutil', 'sugov-rate-limit', 'reload-module']

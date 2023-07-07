@@ -8,11 +8,6 @@ device:
   lisa_module_path: /data/local/lisa.ko
 processor:
   important_tasks:
-    drarm: [
-      'UnityMain', 'UnityGfxDeviceW', 'Thread-7', 'Thread-6', 'Thread-5', 'Thread-4',
-      'surfaceflinger', 'mali-cmar-backe', 'mali_jd_thread', 'writer', 'FastMixer',
-      'RenderEngine', 'Audio Mixer Thr', 'UnityChoreograp',
-    ]
     jankbench: [
       'RenderThread', 'droid.benchmark', 'surfaceflinger', 'decon0_kthread',
     ]
@@ -22,4 +17,15 @@ processor:
     speedometer: [
       'CrRendererMain', 'ThreadPoolForeg', '.android.chrome', 'CrGpuMain', 'Compositor',
       'Chrome_IOThread', 'surfaceflinger', 'RenderThread',
+    ]
+    drarm: [
+      'UnityMain', 'UnityGfxDeviceW', 'Thread-7', 'Thread-6', 'Thread-5', 'Thread-4',
+      'surfaceflinger', 'mali-cmar-backe', 'mali_jd_thread', 'writer', 'FastMixer',
+      'RenderEngine', 'Audio Mixer Thr', 'UnityChoreograp',
+    ]
+    fortnite: [
+      'GameThread', 'RHIThread', 'RenderThread 0', 'AudioMi-nder(1)', 'Foregro-rker #1',
+      'Foregro-rker #0', 'Backgro-rker #2', 'Backgro-rker #3', 'mali-cmar-backe',
+      'FastMixer', 'surfaceflinger', 'writer', 'ElectraPlayer::', 'MediaCodec_loop',
+      'RenderEngine', 'mali-compiler', 'mali_jd_thread', 'oid.aac.decoder'
     ]
