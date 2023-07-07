@@ -1,6 +1,5 @@
 import os
 import yaml
-import pyarrow
 import logging as log
 import polars as pl
 
@@ -13,10 +12,12 @@ def load_yaml(path):
         return yaml.load(ymlfile, Loader=yaml.CLoader)
 
 
+def cpu_cluster(cpu):
+    return 'little' if cpu < 4 else 'big' if cpu > 5 else 'mid'
+
+
 def df_add_cluster(df, cpu_col='cpu'):
-    return df.with_columns(pl.col(cpu_col).apply(
-        lambda c: 'little' if c < 4 else 'big' if c > 5 else 'mid'
-    ).alias('cluster'))
+    return df.with_columns(pl.col(cpu_col).apply(cpu_cluster).alias('cluster'))
 
 
 def df_sort_by_clusters(df, value_cols):

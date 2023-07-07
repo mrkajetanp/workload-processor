@@ -15,6 +15,7 @@ from wp import trace_to_dfs as tdfs
 from wp.constants import APP_NAME
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, traces_analysis
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
+from wp.helpers import cpu_cluster
 
 
 class WorkloadProcessor:
@@ -346,12 +347,11 @@ class WorkloadProcessor:
         df = df.filter(pl.col('active') == 1).groupby(['kernel', 'wa_path', 'iteration', 'cpu', 'comm']).agg(
             pl.col('duration').count().alias('count'), pl.col('duration').sum().alias('duration')
         ).with_columns(
-            pl.col('cpu').apply(lambda cpu: 'little' if cpu < 4 else 'big' if cpu > 5 else 'mid').alias('cluster')
+            pl.col('cpu').apply(cpu_cluster).alias('cluster')
         )[['kernel', 'wa_path', 'iteration', 'cpu', 'cluster', 'comm', 'count', 'duration']]
 
         df.write_parquet(os.path.join(self.analysis_path, 'task_activations_stats.pqt'))
         print(df)
-
 
     def trace_cgroup_attach_task_analysis(self):
         log.info('Collecting cgroup_attach_task events')
