@@ -20,7 +20,8 @@ def trim_number(x):
         return f"{round(x / 1000000, 3)}M"
     if x > 10000:
         return f"{round(x / 1000, 2)}k"
-    if x < 0.01:
+        return str(x)
+    if x != 0 and x < 0.01:
         return f"{round(x * 1000000, 2)}μ"
     return str(x)
 
@@ -120,7 +121,8 @@ class WorkloadNotebookAnalysis:
 
     def plot_gmean_bars(self, df, x='stat', y='value', facet_col='metric', facet_col_wrap=3, title='',
                         width=None, height=600, gmean_round=1, include_columns=[], table_sort=None,
-                        order_cluster=False, sort_ascending=False, include_total=False, debug=False):
+                        order_cluster=False, sort_ascending=False, include_total=False, debug=False,
+                        percentage=True):
 
         shown_clusters = self.CLUSTERS if not include_total else self.CLUSTERS_TOTAL
         if 'unit' not in df.columns:
@@ -129,37 +131,35 @@ class WorkloadNotebookAnalysis:
             df['metric'] = 'gmean'
 
         if debug:
-            print('df')
-            display(df)
+            import pdb
+            pdb.set_trace()
 
-        # compute percentage differences
-        stats_perc = Stats(df, ref_group={'wa_path': self.wa_paths[0]}, value_col=y,
-                           agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
-        # re-add stub a_wa_path
-        stats_perc_vals_temp = stats_perc.query(f"wa_path == '{self.wa_paths[1]}'")
-        stats_perc_vals_temp['wa_path'] = self.wa_paths[0]
-        stats_perc_vals_temp['value'] = 0
-        # re-combine a df with percentage differences
-        stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
-        stats_perc_vals['order_kernel'] = stats_perc_vals['wa_path'].map(lambda x: self.wa_paths.index(x))
-
-        if debug:
-            print(stats_perc_vals)
-            display(stats_perc_vals)
-
+        # prepare the sort list
         sort_list = ['metric']
-
         if order_cluster:
             sort_list.append('order_cluster')
-            stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
-
         sort_list.append('order_kernel')
 
-        # split into dfs with percentages and pvalues
-        stats_perc_pvals = stats_perc_vals.query("stat == 'ks2samp_test'").sort_values(
-            by=sort_list
-        ).reset_index(drop=True)
-        stats_perc_vals = stats_perc_vals.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
+        # prepare percentage differences & pvalues
+        if percentage:
+            # compute percentage differences
+            stats_perc = Stats(df, ref_group={'wa_path': self.wa_paths[0]}, value_col=y,
+                               agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
+            # re-add stub a_wa_path
+            stats_perc_vals_temp = stats_perc.query(f"wa_path == '{self.wa_paths[1]}'")
+            stats_perc_vals_temp['wa_path'] = self.wa_paths[0]
+            stats_perc_vals_temp['value'] = 0
+            # re-combine a df with percentage differences
+            stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
+            stats_perc_vals['order_kernel'] = stats_perc_vals['wa_path'].map(lambda x: self.wa_paths.index(x))
+
+            if order_cluster:
+                stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
+            # split into dfs with percentages and pvalues
+            stats_perc_pvals = stats_perc_vals.query("stat == 'ks2samp_test'").sort_values(
+                by=sort_list
+            ).reset_index(drop=True)
+            stats_perc_vals = stats_perc_vals.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
 
         # compute absolute gmeans
         gmeans = Stats(df, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}).df
@@ -170,30 +170,30 @@ class WorkloadNotebookAnalysis:
         if order_cluster:
             gmeans['order_cluster'] = gmeans['cluster'].map(lambda x: shown_clusters.index(x))
 
-        if debug:
-            display(stats_perc_pvals)
-
         gmeans_mean = gmeans.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
-        if debug:
-            print(sort_list)
-            print('gmeans')
-            display(gmeans)
 
+        # prepare the data table
         data_table_cols = [col for col in gmeans_mean.columns
                            if col in ([
                                'wa_path', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'
                            ] + include_columns)]
         data_table = gmeans_mean[data_table_cols].rename(columns={'wa_path': 'kernel'})
-        data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
+        if percentage:
+            data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
         data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
         if table_sort is not None:
             data_table = data_table.sort_values(by=table_sort)
         ptable(data_table)
 
+        # prepare the plot labels
+        plot_text = format_percentage(
+            gmeans_mean['value'], stats_perc_vals['value'], stats_perc_pvals['value']
+        ) if percentage else gmeans_mean['value']
+
         # plot bars
         fig = px.bar(gmeans_mean, x=x, y=y, color='wa_path', facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                      barmode='group', title=title, width=width, height=height,
-                     text=format_percentage(gmeans_mean['value'], stats_perc_vals['value'], stats_perc_pvals['value']))
+                     text=plot_text)
         fig.update_traces(textposition='outside')
         fig.update_yaxes(matches=None)
         if sort_ascending:
