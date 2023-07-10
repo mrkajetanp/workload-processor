@@ -14,7 +14,7 @@ from lisa.stats import Stats
 from lisa.platforms.platinfo import PlatformInfo
 from lisa.utils import LazyMapping
 
-from wp.helpers import wa_output_to_mock_traces
+from wp.helpers import wa_output_to_mock_traces, flatten
 from wp.constants import APP_NAME
 
 
@@ -51,10 +51,6 @@ def trim_wa_path(path):
 
 
 class WorkloadNotebookAnalysis:
-    CPUS = ['0.0', '1.0', '2.0', '3.0', '4.0', '5.0', '6.0', '7.0']
-    CLUSTERS = ['little', 'mid', 'big']
-    CLUSTERS_TOTAL = ['little', 'mid', 'big', 'total']
-
     def __init__(self, benchmark_path, benchmark_dirs):
         self.benchmark_path = benchmark_path
         self.benchmark_dirs = benchmark_dirs
@@ -89,6 +85,10 @@ class WorkloadNotebookAnalysis:
 
         self.analysis = dict()
         self.summary = dict()
+
+        self.CPUS = [str(float(x)) for x in flatten(self.config['target']['clusters'].get().values())]
+        self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
+        self.CLUSTERS_TOTAL = self.CLUSTERS + ['total']
 
     @cached_property
     def plat_info(self):

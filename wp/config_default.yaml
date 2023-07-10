@@ -1,6 +1,11 @@
 target:
   plat_info: ~/power/pixel6/workload-processor/assets/p6-platform-info.yml
   target_conf: ~/tools/lisa/target_conf_p6.yml
+  clusters: {
+      'little': [0, 1, 2, 3],
+      'mid': [4, 5],
+      'big': [6, 7],
+  }
 host:
   adb_host: 127.0.0.1
   adb_port: 5037
