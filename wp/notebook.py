@@ -219,3 +219,11 @@ class WorkloadNotebookAnalysis:
         fig.show(renderer='iframe')
 
         return data_table
+
+    def plot_lines_px(self, df, x='iteration', y='value', color='wa_path', facet_col=None, facet_col_wrap=2,
+                      height=600, width=None, title=None, scale_y=False, renderer='iframe'):
+        fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
+                      height=height, width=width, title=title)
+        if not scale_y:
+            fig.update_yaxes(matches=None)
+        fig.show(renderer=renderer)
