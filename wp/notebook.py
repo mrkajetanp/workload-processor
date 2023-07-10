@@ -113,6 +113,10 @@ class WorkloadNotebookAnalysis:
         print('wa_paths:', self.wa_paths)
         print('kernels:', self.kernels)
 
+    @property
+    def config(self):
+        return confuse.Configuration(APP_NAME, __name__)
+
     def load_combined_analysis(self, name, trim_path=True, preprocess=lambda d: d,
                                postprocess=None, allow_missing=False):
 
