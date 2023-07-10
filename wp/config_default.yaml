@@ -7,6 +7,11 @@ target:
       'big': [6, 7],
   }
   cgroups: ['background', 'foreground', 'system-background']
+  perf_counter_ids: {
+      0x0011: 'CPU_CYCLES', 0x8: 'INST_RETIRED', 0x1B: 'INST_SPEC', 0x22: 'BR_MIS_PRED_RETIRED',
+      0x23: 'STALL_FRONTEND', 0x24: 'STALL_BACKEND', 0x4005: 'STALL_BACKEND_MEM',
+      0x0004: 'L1D_CACHE', 0x0003: 'L1D_CACHE_MISS', 0x2B: 'L3D_CACHE', 0x2A: 'L3D_CACHE_MISS',
+  }
 host:
   adb_host: 127.0.0.1
   adb_port: 5037

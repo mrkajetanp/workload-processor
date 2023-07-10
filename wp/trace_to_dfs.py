@@ -262,19 +262,11 @@ def trace_uclamp_df(trace):
     )
 
 
-PERF_COUNTER_IDS = {
-    0x0011: 'CPU_CYCLES', 0x8: 'INST_RETIRED', 0x1B: 'INST_SPEC', 0x22: 'BR_MIS_PRED_RETIRED',
-    0x23: 'STALL_FRONTEND', 0x24: 'STALL_BACKEND', 0x4005: 'STALL_BACKEND_MEM',
-    0x0004: 'L1D_CACHE', 0x0003: 'L1D_CACHE_MISS',
-    0x2B: 'L3D_CACHE', 0x2A: 'L3D_CACHE_MISS',
-}
-
-
 def trace_perf_counters_df(trace):
     df = pl.from_pandas(trace.df_event('perf_counter').reset_index()[['Time', 'cpu', 'counter_id', 'value']])
 
     def process_counter_group_df(counter, cpu, group_df):
-        counter_name = PERF_COUNTER_IDS[int(counter)]
+        counter_name = CONFIG['target']['perf_counter_ids'].get()[int(counter)]
         group_df = group_df.with_columns(pl.col('value').diff().alias(f'{counter_name}')).rename(
             {'value': f'{counter_name}-Total'}
         ).drop_nulls()
