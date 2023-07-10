@@ -92,9 +92,9 @@ def trace_tasks_residency_time_df(trace):
             pl.sum(pl.col([str(float(cpu)) for cpu in cpus])).alias(cluster) for cluster, cpus in CLUSTERS.items()
         ]
     )
+    cpu_count = sum([len(lst) for lst in CONFIG['target']['clusters'].get().values()])
     return df.rename({**{col: str(col) for col in df.columns},
-                      **{'0.0': 'cpu0', '1.0': 'cpu1', '2.0': 'cpu2', '3.0': 'cpu3',
-                         '4.0': 'cpu4', '5.0': 'cpu5', '6.0': 'cpu6', '7.0': 'cpu7'}})
+                      **{str(float(i)): "cpu"+str(i) for i in range(cpu_count)}})
 
 
 def trace_task_wakeup_latency_df(trace, tasks):
