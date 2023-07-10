@@ -6,12 +6,51 @@ import lisa
 from lisa.trace import TaskID
 
 from wp.constants import APP_NAME
-from wp.helpers import df_add_cluster, flatten, trim_task_comm
+from wp.helpers import df_add_cluster, flatten, trim_task_comm, df_add_wa_output_tags
 
 CONFIG = confuse.Configuration(APP_NAME, __name__)
 
 CLUSTERS = CONFIG['target']['clusters'].get()
 CGROUPS = CONFIG['target']['cgroups'].get()
+
+
+class WorkloadAnalysisRunner:
+    def __init__(self, processor):
+        self.processor = processor
+
+    def apply(self, trace_to_df):
+        def analyse_iteration(trace, iteration):
+            log.debug(f'Processing iteration {iteration} from {trace.trace_path} with {trace_to_df.__name__}')
+            try:
+                return trace_to_df(trace).with_columns(pl.lit(iteration).alias('iteration'))
+            except Exception as e:
+                log.error(f'Processing iteration {iteration} failed with {e}')
+                if self.processor.allow_missing:
+                    return None
+                raise e
+
+        log.debug(f'Applying analysis {trace_to_df.__name__}')
+        dfs = [analyse_iteration(trace, iteration) for iteration, trace in self.processor.traces.items()]
+        analysis_df = pl.concat([df for df in dfs if df is not None])
+        return df_add_wa_output_tags(analysis_df, self.processor.wa_output)
+
+    def trace_cpu_idle_df(self, trace):
+        df = pl.from_pandas(trace.ana.idle.df_cpus_idle().reset_index())
+        return df_add_cluster(df)
+
+    def trace_idle_residency_time_df(self, trace):
+        def cluster_state_residencies(cluster, cpus):
+            df = pl.from_pandas(trace.ana.idle.df_cluster_idle_state_residency(cpus).reset_index()).sort('idle_state')
+            return df.with_columns(pl.lit(cluster).alias('cluster'))
+
+        return pl.concat([
+            cluster_state_residencies(cluster, cpus)
+            for cluster, cpus in CLUSTERS.items()
+        ])
+
+    def trace_cpu_idle_miss_df(self, trace):
+        df = pl.from_pandas(trace.df_event("cpu_idle_miss").reset_index())
+        return df_add_cluster(df, cpu_col='cpu_id')
 
 
 def trace_pixel6_emeter_df(trace):
@@ -27,27 +66,6 @@ def trace_energy_estimate_df(trace):
     ]).with_columns([
         (pl.sum(pl.col([str(x) for x in (CLUSTERS['little'] + CLUSTERS['mid'] + CLUSTERS['big'])]))).alias('total')
     ])
-
-
-def trace_cpu_idle_df(trace):
-    df = pl.from_pandas(trace.ana.idle.df_cpus_idle().reset_index())
-    return df_add_cluster(df)
-
-
-def trace_idle_residency_time_df(trace):
-    def cluster_state_residencies(cluster, cpus):
-        df = pl.from_pandas(trace.ana.idle.df_cluster_idle_state_residency(cpus).reset_index()).sort('idle_state')
-        return df.with_columns(pl.lit(cluster).alias('cluster'))
-
-    return pl.concat([
-        cluster_state_residencies(cluster, cpus)
-        for cluster, cpus in CLUSTERS.items()
-    ])
-
-
-def trace_cpu_idle_miss_df(trace):
-    df = pl.from_pandas(trace.df_event("cpu_idle_miss").reset_index())
-    return df_add_cluster(df, cpu_col='cpu_id')
 
 
 def trace_frequency_df(trace):

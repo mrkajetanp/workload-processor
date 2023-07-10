@@ -37,23 +37,6 @@ def df_iterations_mean(df, other_cols=None):
     )
 
 
-# TODO: probably fold into the processor
-def traces_analysis(traces, trace_to_df, allow_missing):
-    def analyse_iteration(trace, iteration):
-        log.debug(f'Processing iteration {iteration} from {trace.trace_path} with {trace_to_df.__name__}')
-        try:
-            return trace_to_df(trace).with_columns(pl.lit(iteration).alias('iteration'))
-        except Exception as e:
-            log.error(f'Processing iteration {iteration} failed with {e}')
-            if allow_missing:
-                return None
-            raise e
-
-    log.debug(f'Creating trace analysis dfs using {trace_to_df.__name__}')
-    dfs = [analyse_iteration(trace, iteration) for iteration, trace in traces.items()]
-    return pl.concat([df for df in dfs if df is not None])
-
-
 def df_add_wa_output_tags(df, out):
     log.debug(f'Adding WA output tags to {out.path}')
     kernel = out._jobs[os.path.basename(out.path)][0].target_info.kernel_version.release

@@ -11,9 +11,10 @@ from lisa.platforms.platinfo import PlatformInfo
 from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
 
-from wp import trace_to_dfs as tdfs
+from wp import analysis as ana
+from wp.analysis import WorkloadAnalysisRunner
 from wp.constants import APP_NAME
-from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, traces_analysis
+from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
 from wp.helpers import cpu_cluster
 
@@ -64,6 +65,9 @@ class WorkloadProcessor:
         else:
             self.traces = wa_output_to_mock_traces(self.wa_output, self.plat_info)
         log.debug(f"trace loading complete, took {round(time.time() - traces_start, 2)}s")
+
+        # initialise the analysis runner
+        self.analysis = WorkloadAnalysisRunner(self)
 
     def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
@@ -143,13 +147,9 @@ class WorkloadProcessor:
             trace.start
         log.info('Traces validated successfully')
 
-    def apply_analysis(self, trace_to_df):
-        log.debug(f'Applying analysis {trace_to_df.__name__}')
-        return df_add_wa_output_tags(traces_analysis(self.traces, trace_to_df, self.allow_missing), self.wa_output)
-
     def trace_pixel6_emeter_analysis(self):
         log.info('Collecting data from pixel6_emeter')
-        power = self.apply_analysis(tdfs.trace_pixel6_emeter_df)
+        power = self.analysis.apply(ana.trace_pixel6_emeter_df)
         power.write_parquet(os.path.join(self.analysis_path, 'pixel6_emeter.pqt'))
         print(power)
         power_mean = df_iterations_mean(power, other_cols=['channel'])
@@ -158,7 +158,7 @@ class WorkloadProcessor:
 
     def trace_energy_estimate_analysis(self):
         log.info('Computing energy estimates')
-        df = self.apply_analysis(tdfs.trace_energy_estimate_df)
+        df = self.analysis.apply(ana.trace_energy_estimate_df)
         df.write_parquet(os.path.join(self.analysis_path, 'energy_estimate.pqt'))
         print(df)
 
@@ -170,18 +170,18 @@ class WorkloadProcessor:
 
     def trace_cpu_idle_analysis(self):
         log.info('Collecting cpu_idle events')
-        idle = self.apply_analysis(tdfs.trace_cpu_idle_df)
+        idle = self.analysis.apply(self.analysis.trace_cpu_idle_df)
         idle.write_parquet(os.path.join(self.analysis_path, 'cpu_idle.pqt'))
         print(idle)
 
         log.info('Computing idle residencies')
-        idle_res = self.apply_analysis(tdfs.trace_idle_residency_time_df)
+        idle_res = self.analysis.apply(self.analysis.trace_idle_residency_time_df)
         idle_res.write_parquet(os.path.join(self.analysis_path, 'idle_residency.pqt'))
         print(idle_res)
 
     def trace_cpu_idle_miss_analysis(self):
         log.info('Collecting cpu_idle_miss events')
-        idle_miss = self.apply_analysis(tdfs.trace_cpu_idle_miss_df)
+        idle_miss = self.analysis.apply(self.analysis.trace_cpu_idle_miss_df)
 
         idle_miss.write_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss.pqt'))
         print(idle_miss)
@@ -194,7 +194,7 @@ class WorkloadProcessor:
 
     def trace_frequency_analysis(self):
         log.info('Collecting frequency data')
-        freq = self.apply_analysis(tdfs.trace_frequency_df)
+        freq = self.analysis.apply(ana.trace_frequency_df)
         freq.write_parquet(os.path.join(self.analysis_path, 'freqs.pqt'))
         print(freq)
 
@@ -204,13 +204,13 @@ class WorkloadProcessor:
         print(freq_mean)
 
         log.info('Computing frequency residency')
-        freq_res = self.apply_analysis(tdfs.trace_frequency_residency_df)
+        freq_res = self.analysis.apply(ana.trace_frequency_residency_df)
         freq_mean.write_parquet(os.path.join(self.analysis_path, 'freqs_residency.pqt'))
         print(freq_res)
 
     def trace_overutilized_analysis(self):
         log.info('Collecting overutilized data')
-        overutil = self.apply_analysis(tdfs.trace_overutilized_df)
+        overutil = self.analysis.apply(ana.trace_overutilized_df)
         overutil.write_parquet(os.path.join(self.analysis_path, 'overutilized.pqt'))
         print(overutil)
 
@@ -226,7 +226,7 @@ class WorkloadProcessor:
 
     def trace_sched_pelt_cfs_analysis(self):
         log.info('Collecting sched_pelt_cfs data')
-        pelt = self.apply_analysis(tdfs.trace_sched_pelt_cfs_df)
+        pelt = self.analysis.apply(ana.trace_sched_pelt_cfs_df)
         pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs.pqt'))
         print(pelt)
 
@@ -241,7 +241,7 @@ class WorkloadProcessor:
 
     def trace_tasks_residency_time_analysis(self):
         log.info('Collecting task residency data')
-        tasks = self.apply_analysis(tdfs.trace_tasks_residency_time_df)
+        tasks = self.analysis.apply(ana.trace_tasks_residency_time_df)
         tasks.write_parquet(os.path.join(self.analysis_path, 'tasks_residency.pqt'))
         print(tasks)
 
@@ -301,18 +301,18 @@ class WorkloadProcessor:
         log.info('Collecting task wakeup latencies')
 
         label_to_analysis = {
-            'jankbench': tdfs.trace_wakeup_latency_jankbench_df,
-            'geekbench': tdfs.trace_wakeup_latency_geekbench_df,
-            'speedometer': tdfs.trace_wakeup_latency_speedometer_df,
-            'drarm': tdfs.trace_wakeup_latency_drarm_df,
-            'fortnite': tdfs.trace_wakeup_latency_fortnite_df,
+            'jankbench': ana.trace_wakeup_latency_jankbench_df,
+            'geekbench': ana.trace_wakeup_latency_geekbench_df,
+            'speedometer': ana.trace_wakeup_latency_speedometer_df,
+            'drarm': ana.trace_wakeup_latency_drarm_df,
+            'fortnite': ana.trace_wakeup_latency_fortnite_df,
         }
 
         label = self.wa_output.jobs[0].label
         if label not in label_to_analysis:
             log.error(f'Workload {label} does not yet support task wakeup latency analysis')
             return
-        df = self.apply_analysis(label_to_analysis[label])
+        df = self.analysis.apply(label_to_analysis[label])
 
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency.pqt'))
         print(df)
@@ -328,18 +328,18 @@ class WorkloadProcessor:
         log.info('Collecting task activations')
 
         label_to_analysis = {
-            'jankbench': tdfs.trace_tasks_activations_jankbench_df,
-            'geekbench': tdfs.trace_tasks_activations_geekbench_df,
-            'speedometer': tdfs.trace_tasks_activations_speedometer_df,
-            'drarm': tdfs.trace_tasks_activations_drarm_df,
-            'fortnite': tdfs.trace_tasks_activations_fortnite_df,
+            'jankbench': ana.trace_tasks_activations_jankbench_df,
+            'geekbench': ana.trace_tasks_activations_geekbench_df,
+            'speedometer': ana.trace_tasks_activations_speedometer_df,
+            'drarm': ana.trace_tasks_activations_drarm_df,
+            'fortnite': ana.trace_tasks_activations_fortnite_df,
         }
 
         label = self.wa_output.jobs[0].label
         if label not in label_to_analysis:
             log.error(f'Workload {label} does not yet support task activation analysis')
             return
-        df = self.apply_analysis(label_to_analysis[label])
+        df = self.analysis.apply(label_to_analysis[label])
 
         df.write_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
         print(df)
@@ -363,13 +363,13 @@ class WorkloadProcessor:
 
     def trace_cgroup_attach_task_analysis(self):
         log.info('Collecting cgroup_attach_task events')
-        df = self.apply_analysis(tdfs.trace_cgroup_attach_task_df)
+        df = self.analysis.apply(ana.trace_cgroup_attach_task_df)
         df.write_parquet(os.path.join(self.analysis_path, 'cgroup_attach_task.pqt'))
         print(df)
 
     def trace_wakeup_latency_cgroup_analysis(self):
         log.info('Collecting per-cgroup task wakeup latency')
-        df = self.apply_analysis(tdfs.trace_wakeup_latency_cgroup_df)
+        df = self.analysis.apply(ana.trace_wakeup_latency_cgroup_df)
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup.pqt'))
         print(df)
 
@@ -382,7 +382,7 @@ class WorkloadProcessor:
 
     def trace_tasks_residency_cgroup_analysis(self):
         log.info('Collecting per-cgroup tasks residency')
-        df = self.apply_analysis(tdfs.trace_tasks_residency_cgroup_df)
+        df = self.analysis.apply(ana.trace_tasks_residency_cgroup_df)
         df.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup.pqt'))
         print(df)
 
@@ -395,14 +395,14 @@ class WorkloadProcessor:
 
     def trace_uclamp_analysis(self):
         log.info('Collecting uclamp data')
-        df = self.apply_analysis(tdfs.trace_uclamp_df)
+        df = self.analysis.apply(ana.trace_uclamp_df)
 
         df.write_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
         print(df)
 
     def trace_perf_event_analysis(self):
         log.info('Collecting perf counter event data')
-        df = self.apply_analysis(tdfs.trace_perf_counters_df)
+        df = self.analysis.apply(ana.trace_perf_counters_df)
 
         log.debug('Saving the perf counter event analysis file')
         df.write_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
@@ -410,7 +410,7 @@ class WorkloadProcessor:
 
     def trace_capacity_analysis(self):
         log.info('Collecting capacity data')
-        df = self.apply_analysis(tdfs.trace_capacity_df)
+        df = self.analysis.apply(ana.trace_capacity_df)
 
         df.write_parquet(os.path.join(self.analysis_path, 'capacity.pqt'))
         print(df)
