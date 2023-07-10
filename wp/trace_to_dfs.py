@@ -8,14 +8,10 @@ from lisa.trace import TaskID
 from wp.constants import APP_NAME
 from wp.helpers import df_add_cluster, flatten, trim_task_comm
 
-# TODO: pull this from platform info instead
-CLUSTERS = {
-    'little': [0, 1, 2, 3],
-    'mid': [4, 5],
-    'big': [6, 7],
-}
+CONFIG = confuse.Configuration(APP_NAME, __name__)
 
-CGROUPS = ['background', 'foreground', 'system-background']
+CLUSTERS = CONFIG['target']['clusters'].get()
+CGROUPS = CONFIG['target']['cgroups'].get()
 
 
 def trace_pixel6_emeter_df(trace):
