@@ -85,6 +85,11 @@ optional arguments:
   -a, --auto-process  Auto process after the run completes
 ```
 
+#### workload-automation plugins
+
+Some useful non-upstreamed workload-automation plugins can be found under the plugins/ directory.
+In order to make them available to WA they just need to be put under `~/.workload_automation/plugins/`.
+
 ### The processor
 
 The processor is the main part of this project. It can be accessed using `workload-processor process`.
