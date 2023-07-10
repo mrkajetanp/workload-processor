@@ -2,15 +2,20 @@ import os
 import pandas as pd
 import scipy as sp
 import logging as log
+import confuse
 from tabulate import tabulate
+from functools import lru_cache, cached_property
 
 from IPython.display import display
 import plotly.express as px
 
 from lisa.wa import WAOutput
 from lisa.stats import Stats
+from lisa.platforms.platinfo import PlatformInfo
+from lisa.utils import LazyMapping
 
 from wp.helpers import wa_output_to_mock_traces
+from wp.constants import APP_NAME
 
 
 def trim_number(x):
@@ -85,13 +90,22 @@ class WorkloadNotebookAnalysis:
         self.analysis = dict()
         self.summary = dict()
 
-    # TODO: auto plat info from config?
-    def load_traces(self, plat_info=None):
+    @cached_property
+    def plat_info(self):
+        self.plat_info = None
+        plat_info_path = os.path.expanduser(self.config['target']['plat_info'].get(str))
+        if plat_info_path is not None:
+            return PlatformInfo.from_yaml_map(plat_info_path)
+        return None
+
+    @cached_property
+    def traces(self):
         # TODO: fallback version for no-parser
-        self.traces = {
-            trim_wa_path(os.path.basename(wa_output.path)): wa_output_to_mock_traces(wa_output, plat_info)
-            for wa_output in self.wa_outputs
-        }
+        return LazyMapping({
+            trim_wa_path(os.path.basename(wa_output.path)): lru_cache()(
+                lambda k: wa_output_to_mock_traces(wa_output, self.plat_info)
+            ) for wa_output in self.wa_outputs
+        })
 
     def show(self):
         display(self.results)
