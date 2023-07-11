@@ -3,6 +3,8 @@ import pandas as pd
 import scipy as sp
 import logging as log
 import confuse
+import shutil
+
 from tabulate import tabulate
 from functools import lru_cache, cached_property
 
@@ -14,7 +16,7 @@ from lisa.stats import Stats
 from lisa.platforms.platinfo import PlatformInfo
 from lisa.utils import LazyMapping
 
-from wp.helpers import wa_output_to_mock_traces, flatten
+from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten
 from wp.constants import APP_NAME
 
 
@@ -100,10 +102,12 @@ class WorkloadNotebookAnalysis:
 
     @cached_property
     def traces(self):
-        # TODO: fallback version for no-parser
+        trace_parquet_found = shutil.which('trace-parquet') is not None
+        trace_function = wa_output_to_mock_traces if trace_parquet_found else wa_output_to_traces
+
         return LazyMapping({
             trim_wa_path(os.path.basename(wa_output.path)): lru_cache()(
-                lambda k: wa_output_to_mock_traces(wa_output, self.plat_info)
+                lambda k: trace_function(wa_output, self.plat_info)
             ) for wa_output in self.wa_outputs
         })
 
