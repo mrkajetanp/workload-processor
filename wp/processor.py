@@ -285,15 +285,11 @@ class WorkloadProcessor:
     def thermal_analysis(self):
         log.info('Collecting thermal data')
 
+        thermal_zones = self.config['target']['thermal_zones'].get()
         thermals = df_add_wa_output_tags(pl.concat([
             pl.read_csv(job.get_artifact_path('poller-output')).with_columns(pl.lit(job.iteration).alias('iteration'))
             for job in self.wa_output.jobs
-        ]), self.wa_output).sort('iteration').rename({
-            "thermal_zone0-temp": "big",
-            "thermal_zone1-temp": "mid",
-            "thermal_zone2-temp": "little",
-            "time": "Time"
-        })
+        ]), self.wa_output).sort('iteration').rename({**{'time': 'Time'}, **thermal_zones})
 
         thermals.write_parquet(os.path.join(self.analysis_path, 'thermal.pqt'))
         print(thermals)

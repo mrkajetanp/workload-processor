@@ -12,6 +12,11 @@ target:
       0x23: 'STALL_FRONTEND', 0x24: 'STALL_BACKEND', 0x4005: 'STALL_BACKEND_MEM',
       0x0004: 'L1D_CACHE', 0x0003: 'L1D_CACHE_MISS', 0x2B: 'L3D_CACHE', 0x2A: 'L3D_CACHE_MISS',
   }
+  thermal_zones: {
+      'thermal_zone0-temp': 'big',
+      'thermal_zone1-temp': 'mid',
+      'thermal_zone2-temp': 'little',
+  }
 host:
   adb_host: 127.0.0.1
   adb_port: 5037
