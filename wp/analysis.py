@@ -8,15 +8,13 @@ from lisa.trace import TaskID
 from wp.constants import APP_NAME
 from wp.helpers import df_add_cluster, flatten, trim_task_comm, df_add_wa_output_tags
 
-CONFIG = confuse.Configuration(APP_NAME, __name__)
-
-CLUSTERS = CONFIG['target']['clusters'].get()
-CGROUPS = CONFIG['target']['cgroups'].get()
-
 
 class WorkloadAnalysisRunner:
     def __init__(self, processor):
         self.processor = processor
+        self.config = confuse.Configuration(APP_NAME, __name__)
+        self.clusters = self.config['target']['clusters'].get()
+        self.cgroups = self.config['target']['cgroups'].get()
 
     def apply(self, trace_to_df):
         def analyse_iteration(trace, iteration):
@@ -45,7 +43,7 @@ class WorkloadAnalysisRunner:
 
         return pl.concat([
             cluster_state_residencies(cluster, cpus)
-            for cluster, cpus in CLUSTERS.items()
+            for cluster, cpus in self.clusters.items()
         ])
 
     def trace_cpu_idle_miss_df(self, trace):
@@ -60,9 +58,11 @@ class WorkloadAnalysisRunner:
         df = pl.from_pandas(em.estimate_from_trace(trace).reset_index())
 
         return df.with_columns([
-            pl.sum(pl.col([str(cpu) for cpu in cpus])).alias(cluster) for cluster, cpus in CLUSTERS.items()
+            pl.sum(pl.col([str(cpu) for cpu in cpus])).alias(cluster) for cluster, cpus in self.clusters.items()
         ]).with_columns([
-            (pl.sum(pl.col([str(x) for x in (CLUSTERS['little'] + CLUSTERS['mid'] + CLUSTERS['big'])]))).alias('total')
+            (pl.sum(pl.col(
+                [str(x) for x in (self.clusters['little'] + self.clusters['mid'] + self.clusters['big'])]
+            ))).alias('total')
         ])
 
     def trace_frequency_df(self, trace):
@@ -79,7 +79,7 @@ class WorkloadAnalysisRunner:
                 except ValueError:
                     return None
 
-            freqs = [frequency_residencies(cluster, cpus[0]) for cluster, cpus in CLUSTERS.items()]
+            freqs = [frequency_residencies(cluster, cpus[0]) for cluster, cpus in self.clusters.items()]
             return pl.concat([df for df in freqs if df is not None])
         except lisa.conf.ConfigKeyError as e:
             log.error("Platform info not provided, can't compute frequency residencies.")
@@ -100,17 +100,18 @@ class WorkloadAnalysisRunner:
         df = pl.from_pandas(trace.ana.tasks.df_tasks_total_residency().reset_index())
         df = df.with_columns(
             [pl.col('index').apply(trim_task_comm).alias('comm')] + [
-                pl.sum(pl.col([str(float(cpu)) for cpu in cpus])).alias(cluster) for cluster, cpus in CLUSTERS.items()
+                pl.sum(pl.col([str(float(cpu)) for cpu in cpus])).alias(cluster)
+                for cluster, cpus in self.clusters.items()
             ]
         )
-        cpu_count = sum([len(lst) for lst in CONFIG['target']['clusters'].get().values()])
+        cpu_count = sum([len(lst) for lst in self.config['target']['clusters'].get().values()])
         return df.rename({**{col: str(col) for col in df.columns},
                           **{str(float(i)): "cpu"+str(i) for i in range(cpu_count)}})
 
     def trace_task_wakeup_latency_df(self, trace):
         tasks = [
             trace.get_task_ids(task)
-            for task in CONFIG['processor']['important_tasks'][self.processor.label].get()
+            for task in self.config['processor']['important_tasks'][self.processor.label].get()
         ]
 
         def task_latency(pid, comm):
@@ -127,7 +128,7 @@ class WorkloadAnalysisRunner:
     def trace_task_activations_df(self, trace):
         tasks = [
             trace.get_task_ids(task)
-            for task in CONFIG['processor']['important_tasks'][self.processor.label].get()
+            for task in self.config['processor']['important_tasks'][self.processor.label].get()
         ]
 
         return pl.concat([
@@ -169,7 +170,7 @@ class WorkloadAnalysisRunner:
             tasks_latencies_list = [task_latencies(task, cgroup) for task in tasks]
             return pl.concat([df for df in tasks_latencies_list if df is not None]) if tasks_latencies_list else None
 
-        cgroup_latencies_list = [cgroup_latencies(df_events, cgroup) for cgroup in CGROUPS]
+        cgroup_latencies_list = [cgroup_latencies(df_events, cgroup) for cgroup in self.cgroups]
         return pl.concat([df for df in cgroup_latencies_list if df is not None])
 
     def trace_tasks_residency_cgroup_df(self, trace):
@@ -189,12 +190,13 @@ class WorkloadAnalysisRunner:
             except ValueError:
                 return None
 
-        residencies = [cgroup_residencies(df_events, cgroup) for cgroup in CGROUPS]
+        residencies = [cgroup_residencies(df_events, cgroup) for cgroup in self.cgroups]
 
         df = pl.concat([res for res in residencies if res is not None and not res.is_empty()])
         df = df.with_columns(
             [pl.col('index').apply(trim_task_comm).alias('comm')] + [
-                pl.sum(pl.col([str(float(cpu)) for cpu in cpus])).alias(cluster) for cluster, cpus in CLUSTERS.items()
+                pl.sum(pl.col([str(float(cpu)) for cpu in cpus])).alias(cluster)
+                for cluster, cpus in self.clusters.items()
             ]
         )
         df = df.groupby(["comm", "cgroup"]).sum().sort('Total', descending=True)
@@ -213,7 +215,7 @@ class WorkloadAnalysisRunner:
         df = pl.from_pandas(trace.df_event('perf_counter').reset_index()[['Time', 'cpu', 'counter_id', 'value']])
 
         def process_counter_group_df(counter, cpu, group_df):
-            counter_name = CONFIG['target']['perf_counter_ids'].get()[int(counter)]
+            counter_name = self.config['target']['perf_counter_ids'].get()[int(counter)]
             group_df = group_df.with_columns(pl.col('value').diff().alias(f'{counter_name}')).rename(
                 {'value': f'{counter_name}-Total'}
             ).drop_nulls()
