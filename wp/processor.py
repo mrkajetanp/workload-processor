@@ -12,7 +12,7 @@ from lisa.trace import MissingTraceEventError
 from devlib.exception import HostError
 
 from wp.analysis import WorkloadAnalysisRunner
-from wp.constants import APP_NAME
+from wp.constants import APP_NAME, SUPPORTED_WORKLOADS
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
 from wp.helpers import cpu_cluster
@@ -67,6 +67,8 @@ class WorkloadProcessor:
 
         # initialise the analysis runner
         self.analysis = WorkloadAnalysisRunner(self)
+
+        self.label = self.wa_output.jobs[0].label
 
     def run_metrics(self, metrics):
         METRIC_TO_ANALYSIS = {
@@ -299,19 +301,10 @@ class WorkloadProcessor:
     def trace_wakeup_latency_analysis(self):
         log.info('Collecting task wakeup latencies')
 
-        label_to_analysis = {
-            'jankbench': self.analysis.trace_wakeup_latency_jankbench_df,
-            'geekbench': self.analysis.trace_wakeup_latency_geekbench_df,
-            'speedometer': self.analysis.trace_wakeup_latency_speedometer_df,
-            'drarm': self.analysis.trace_wakeup_latency_drarm_df,
-            'fortnite': self.analysis.trace_wakeup_latency_fortnite_df,
-        }
-
-        label = self.wa_output.jobs[0].label
-        if label not in label_to_analysis:
-            log.error(f'Workload {label} does not yet support task wakeup latency analysis')
+        if self.label not in SUPPORTED_WORKLOADS:
+            log.error(f'Workload {self.label} does not yet support task wakeup latency analysis')
             return
-        df = self.analysis.apply(label_to_analysis[label])
+        df = self.analysis.apply(self.analysis.trace_task_wakeup_latency_df)
 
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency.pqt'))
         print(df)
@@ -326,19 +319,10 @@ class WorkloadProcessor:
     def trace_tasks_activations_analysis(self):
         log.info('Collecting task activations')
 
-        label_to_analysis = {
-            'jankbench': self.analysis.trace_tasks_activations_jankbench_df,
-            'geekbench': self.analysis.trace_tasks_activations_geekbench_df,
-            'speedometer': self.analysis.trace_tasks_activations_speedometer_df,
-            'drarm': self.analysis.trace_tasks_activations_drarm_df,
-            'fortnite': self.analysis.trace_tasks_activations_fortnite_df,
-        }
-
-        label = self.wa_output.jobs[0].label
-        if label not in label_to_analysis:
-            log.error(f'Workload {label} does not yet support task activation analysis')
+        if self.label not in SUPPORTED_WORKLOADS:
+            log.error(f'Workload {self.label} does not yet support task activation analysis')
             return
-        df = self.analysis.apply(label_to_analysis[label])
+        df = self.analysis.apply(self.analysis.trace_task_activations_df)
 
         df.write_parquet(os.path.join(self.analysis_path, 'task_activations.pqt'))
         print(df)

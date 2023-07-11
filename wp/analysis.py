@@ -107,8 +107,11 @@ class WorkloadAnalysisRunner:
         return df.rename({**{col: str(col) for col in df.columns},
                           **{str(float(i)): "cpu"+str(i) for i in range(cpu_count)}})
 
-    def trace_task_wakeup_latency_df(self, trace, tasks):
-        tasks = [trace.get_task_ids(task) for task in tasks]
+    def trace_task_wakeup_latency_df(self, trace):
+        tasks = [
+            trace.get_task_ids(task)
+            for task in CONFIG['processor']['important_tasks'][self.processor.label].get()
+        ]
 
         def task_latency(pid, comm):
             try:
@@ -121,33 +124,12 @@ class WorkloadAnalysisRunner:
 
         return pl.concat([task_latency(pid, comm) for pid, comm in flatten(tasks)])
 
-    def trace_wakeup_latency_drarm_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['drarm'].get()
-        return self.trace_task_wakeup_latency_df(trace, tasks)
+    def trace_task_activations_df(self, trace):
+        tasks = [
+            trace.get_task_ids(task)
+            for task in CONFIG['processor']['important_tasks'][self.processor.label].get()
+        ]
 
-    def trace_wakeup_latency_fortnite_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['fortnite'].get()
-        return self.trace_task_wakeup_latency_df(trace, tasks)
-
-    def trace_wakeup_latency_jankbench_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['jankbench'].get()
-        return self.trace_task_wakeup_latency_df(trace, tasks)
-
-    def trace_wakeup_latency_geekbench_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['geekbench'].get()
-        return self.trace_task_wakeup_latency_df(trace, tasks)
-
-    def trace_wakeup_latency_speedometer_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['speedometer'].get()
-        return self.trace_task_wakeup_latency_df(trace, tasks)
-
-    def trace_task_activations_df(self, trace, tasks):
-        tasks = [trace.get_task_ids(task) for task in tasks]
         return pl.concat([
             pl.from_pandas(trace.ana.tasks.df_task_activation((pid, comm))).with_columns(
                 pl.col('active', 'duration', 'duty_cycle').cast(pl.Float64),
@@ -156,35 +138,6 @@ class WorkloadAnalysisRunner:
             )
             for pid, comm in flatten(tasks)
         ])
-
-    def trace_tasks_activations_drarm_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-
-        tasks = config['processor']['important_tasks']['drarm'].get() + [
-            task for task in flatten(trace.get_tasks().values()) if 'HwBinder' in task
-        ]
-
-        return self.trace_task_activations_df(trace, tasks)
-
-    def trace_tasks_activations_fortnite_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['fortnite'].get()
-        return self.trace_task_activations_df(trace, tasks)
-
-    def trace_tasks_activations_jankbench_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['jankbench'].get()
-        return self.trace_task_activations_df(trace, tasks)
-
-    def trace_tasks_activations_geekbench_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['geekbench'].get()
-        return self.trace_task_activations_df(trace, tasks)
-
-    def trace_tasks_activations_speedometer_df(self, trace):
-        config = confuse.Configuration(APP_NAME, __name__)
-        tasks = config['processor']['important_tasks']['speedometer'].get()
-        return self.trace_task_activations_df(trace, tasks)
 
     def trace_cgroup_attach_task_df(self, trace):
         df = pl.from_pandas(trace.df_event("cgroup_attach_task").reset_index())
