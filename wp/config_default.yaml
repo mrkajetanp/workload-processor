@@ -28,7 +28,7 @@ processor:
       'RenderThread', 'droid.benchmark', 'surfaceflinger', 'decon0_kthread',
     ]
     geekbench: [
-      'AsyncTask #1', 'labs.geekbench5', 'surfaceflinger',
+      'AsyncTask #1', 'labs.geekbench6', 'surfaceflinger',
     ]
     speedometer: [
       'CrRendererMain', 'ThreadPoolForeg', '.android.chrome', 'CrGpuMain', 'Compositor',
