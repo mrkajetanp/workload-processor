@@ -27,7 +27,6 @@ def df_sort_by_clusters(df, value_cols):
     return df
 
 
-# TODO: dedup cluster freqs
 def df_iterations_mean(df, other_cols=None):
     cols = ['wa_path', 'kernel', 'iteration']
     if other_cols is not None:

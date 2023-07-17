@@ -199,8 +199,13 @@ class WorkloadProcessor:
         freq.write_parquet(os.path.join(self.analysis_path, 'freqs.pqt'))
         print(freq)
 
-        freq_mean = df_sort_by_clusters(df_iterations_mean(freq, other_cols=['cluster']), value_cols=['frequency'])
-        freq_mean = freq_mean.with_columns(pl.col('frequency') / 1000)
+        # get the first cpu out of each cluster to avoid duplicated frequencies
+        cluster_cpus = [cluster[0] for cluster in self.config['target']['clusters'].get().values()]
+        freq = freq.filter(pl.col('cpu').is_in(cluster_cpus))
+
+        freq_mean = df_sort_by_clusters(
+            df_iterations_mean(freq, other_cols=['cluster']), value_cols=['frequency']
+        ).with_columns(pl.col('frequency') / 1000)
         freq_mean.write_parquet(os.path.join(self.analysis_path, 'freqs_mean.pqt'))
         print(freq_mean)
 
