@@ -1,3 +1,4 @@
+import os
 import time
 import logging as log
 import confuse
@@ -96,10 +97,13 @@ class WorkloadDevice:
             log.info(f"policy rate limits: 0: {pol_0_rl}, 4: {pol_4_rl}, 6: {pol_6_rl}")
 
     def reload_module(self):
-        log.info('Reloading the Lisa module from local copy')
+        log.info('Reloading the Lisa module')
         self.device.shell("rmmod lisa")
-        module_path = self.config['device']['lisa_module_path'].get()
-        self.device.shell(f"insmod {module_path}")
+        modules_path = os.path.join(
+            self.config['target']['modules_path'].get(),
+            self.device.shell('uname -r').strip()
+        )
+        self.device.shell(f"modprobe -d {modules_path} lisa")
 
     def disable_cpusets(self):
         log.info('Disabling cpusets for groups background, foreground, system-background and restricted')

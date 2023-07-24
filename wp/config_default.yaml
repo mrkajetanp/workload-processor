@@ -17,11 +17,10 @@ target:
       'thermal_zone1-temp': 'mid',
       'thermal_zone2-temp': 'little',
   }
+  modules_path: /vendor_dlkm/lib/modules/
 host:
   adb_host: 127.0.0.1
   adb_port: 5037
-device:
-  lisa_module_path: /data/local/lisa.ko
 processor:
   important_tasks:
     jankbench: [
