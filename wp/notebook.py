@@ -488,3 +488,88 @@ class WorkloadNotebookPlotter:
             width=width, height=height, title=title
         )
         fig.show(renderer='iframe')
+
+    # -------- Energy Estimate --------
+
+    def _load_energy_estimate(self):
+        self.ana.load_combined_analysis('energy_estimate_mean.pqt')
+        log.info('Loaded energy_estimate_mean into analysis')
+        self.ana.analysis['energy_estimate_melt'] = pd.melt(
+            self.ana.analysis['energy_estimate_mean'], id_vars=['iteration', 'wa_path'],
+            value_vars=['little', 'mid', 'big', 'total']
+        ).rename(columns={'variable': 'cluster'})
+        log.info('Loaded energy_estimate_melt into analysis')
+
+    def energy_estimate_line(self, height=1000, width=None,
+                             title='Mean energy estimate across iterations [bW]', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['energy_estimate_melt'], self._load_energy_estimate)
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['energy_estimate_melt'], facet_col='cluster',
+            height=height, width=width, title=title
+        )
+
+    def energy_estimate_bar(self, height=600, width=None,
+                            title='Gmean energy estimate [bW]', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['energy_estimate_melt'], self._load_energy_estimate)
+
+        self.ana.summary['energy_estimate'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['energy_estimate_melt'], x='cluster', y='value', facet_col='metric',
+            facet_col_wrap=5, title=title, width=width, height=height,
+            include_columns=['cluster'], order_cluster=True, include_total=True
+        )
+
+    # -------- CFS signals --------
+
+    def _load_sched_pelt_cfs(self):
+        self.ana.load_combined_analysis('sched_pelt_cfs_mean.pqt')
+        log.info('Loaded sched_pelt_cfs_mean into analysis')
+        self.ana.analysis['sched_pelt_cfs_melt'] = pd.melt(
+            self.ana.analysis['sched_pelt_cfs_mean'],
+            id_vars=['iteration', 'wa_path', 'kernel', 'cluster'], value_vars=['util', 'load']
+        )
+        log.info('Loaded sched_pelt_cfs_melt into analysis')
+
+    def sched_pelt_cfs_line(self, height=400, width=700,
+                            title='Mean cluster', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['sched_pelt_cfs_mean'], self._load_sched_pelt_cfs)
+
+        signals = ['util', 'load']
+        ds = hv.Dataset(
+            self.ana.analysis['sched_pelt_cfs_mean'],
+            ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths),
+             hv.Dimension('cluster', values=self.ana.CLUSTERS)],
+            signals
+        )
+        layout = hv.Layout([
+            ds.to(hv.Curve, 'iteration', signal).overlay('wa_path').opts(legend_position='bottom').layout(
+                'cluster'
+            ).opts(title=f"{title} {signal}", framewise=True)
+            for signal in signals
+        ]).cols(1)
+        layout.opts(
+            opts.Curve(width=width, height=height, framewise=True),
+        )
+        return layout
+
+    def sched_pelt_cfs_bar(self, height=1000, width=None,
+                           title='Gmean cfs signals', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['sched_pelt_cfs_melt'], self._load_sched_pelt_cfs)
+
+        self.ana.summary['cfs_signals'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['sched_pelt_cfs_melt'], x='cluster', y='value',
+            facet_col='variable', facet_col_wrap=1, title=title,
+            width=width, height=height, order_cluster=True, include_columns=['cluster']
+        )
