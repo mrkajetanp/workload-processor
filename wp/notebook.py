@@ -424,3 +424,67 @@ class WorkloadNotebookPlotter:
             self.ana.results_perf.query("metric in @counters")[['kernel', 'wa_path', 'iteration', 'metric', 'value']],
             x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height
         )
+
+    # -------- Idle --------
+
+    def _load_idle_residency(self):
+        self.ana.load_combined_analysis('idle_residency.pqt')
+        self.ana.analysis['idle_residency'] = self.ana.analysis['idle_residency'].groupby(
+            ['wa_path', 'cluster', 'idle_state'], sort=False
+        ).mean(numeric_only=True).reset_index()[['wa_path', 'cluster', 'idle_state', 'time']]
+        self.ana.analysis['idle_residency']['time'] = round(self.ana.analysis['idle_residency']['time'], 2)
+        log.info('Loaded idle_residency into analysis')
+
+    def idle_residency_bar(self, height=600, width=None, title='Idle state residencies', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['idle_residency'], self._load_idle_residency)
+
+        fig = px.bar(
+            self.ana.analysis['idle_residency'], x='idle_state', y='time', color='wa_path',
+            facet_col='cluster', barmode='group', text=self.ana.analysis['idle_residency']['time'],
+            width=width, height=height, title=title
+        )
+        fig.update_traces(textposition='outside')
+        fig.show(renderer='iframe')
+
+    def _load_idle_miss(self):
+        def preprocess_cpu_idle_miss_df(df):
+            df = df.groupby(['wa_path', 'kernel', 'cluster', 'below']).sum().reset_index()
+            wa_path = trim_wa_path(df['wa_path'].iloc[0])
+            if not wa_path:
+                return df
+            wakeup_count = len(self.ana.analysis['cpu_idle'].query("wa_path == @wa_path and state == -1"))
+            df['count_perc'] = round(df['count'] / wakeup_count * 100, 3)
+            return df
+
+        def postprocess_cpu_idle_miss_df(df):
+            df['type'] = df['below'].replace(0, 'too deep').replace(1, 'too shallow')
+            df['order'] = df['cluster'].replace('little', 0).replace('mid', 1).replace('big', 2)
+            df = df.sort_values(by=['wa_path', 'kernel', 'order', 'type'])
+            return df
+
+        self.ana.load_combined_analysis('cpu_idle.pqt')
+        log.info('Loaded cpu_idle into analysis')
+        self.ana.load_combined_analysis(
+            'cpu_idle_miss_counts.pqt', preprocess=preprocess_cpu_idle_miss_df, postprocess=postprocess_cpu_idle_miss_df
+        )
+        log.info('Loaded cpu_idle_miss_counts into analysis')
+
+    def idle_miss_bar(self, height=600, width=None,
+                      title='CPUIdle misses as percentage of all wakeups', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['cpu_idle_miss_counts'], self._load_idle_miss)
+
+        ptable(self.ana.analysis['cpu_idle_miss_counts'].groupby(['wa_path', 'type']).sum().reset_index()[
+            ['wa_path', 'type', 'count_perc']
+        ])
+        fig = px.bar(
+            self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='wa_path',
+            facet_col='cluster', barmode='group', text=self.ana.analysis['cpu_idle_miss_counts']['count_perc'],
+            width=width, height=height, title=title
+        )
+        fig.show(renderer='iframe')
