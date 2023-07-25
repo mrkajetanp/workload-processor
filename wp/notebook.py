@@ -92,6 +92,9 @@ class WorkloadNotebookAnalysis:
         self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
         self.CLUSTERS_TOTAL = self.CLUSTERS + ['total']
 
+        self.label = self.wa_outputs[0].jobs[0].label
+        self.plot = WorkloadNotebookPlotter(self)
+
     @cached_property
     def plat_info(self):
         self.plat_info = None
@@ -231,3 +234,58 @@ class WorkloadNotebookAnalysis:
         if not scale_y:
             fig.update_yaxes(matches=None)
         fig.show(renderer=renderer)
+
+
+class WorkloadNotebookPlotter:
+    def __init__(self, notebook_analysis):
+        self.ana = notebook_analysis
+
+    def _check_load_analysis(self, names, loader):
+        if any([d not in self.ana.analysis for d in names]):
+            log.debug(f'{names} not found in analysis, trying to load combined analysis')
+            loader()
+
+        if any([d not in self.ana.analysis for d in names]):
+            log.error(f"{names} failed to load into analysis using {loader.__name__}")
+
+    # -------- Power Meter (pixel6_emeter) --------
+
+    def _load_power_meter(self):
+        def postprocess_pixel6_emeter_means(df):
+            df_total = df.groupby(['wa_path', 'kernel', 'iteration']).sum(numeric_only=True).reset_index()
+            df_total['channel'] = 'Total'
+
+            df_cpu_total = df.query("channel.str.startswith('CPU')").groupby(
+                ['wa_path', 'kernel', 'iteration']
+            ).sum(numeric_only=True).reset_index()
+            df_cpu_total['channel'] = 'CPU'
+            return pd.concat([df, df_cpu_total, df_total])[['wa_path', 'kernel', 'iteration', 'channel', 'power']]
+
+        self.ana.load_combined_analysis('pixel6_emeter.pqt')
+        log.info('Loaded pixel6_emeter into analysis')
+        self.ana.load_combined_analysis('pixel6_emeter_mean.pqt', postprocess=postprocess_pixel6_emeter_means)
+        log.info('Loaded pixel6_emeter_mean into analysis')
+
+    def power_meter_line(self, height=1000, width=None,
+                         title='Mean power usage across iterations [mW]', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['pixel6_emeter', 'pixel6_emeter_mean'], self._load_power_meter)
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['pixel6_emeter_mean'], y='power', facet_col='channel',
+            facet_col_wrap=3, height=height, title=title
+        )
+
+    def power_meter_bar(self, height=600, width=None, title='Gmean power usage [mW]', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['pixel6_emeter', 'pixel6_emeter_mean'], self._load_power_meter)
+
+        self.ana.summary['power_usage'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['pixel6_emeter_mean'].rename(columns={'power': 'value'}),
+            x='channel', y='value', facet_col='metric', facet_col_wrap=5, title=title,
+            height=height, width=width, include_total=True, include_columns=['channel']
+        )
