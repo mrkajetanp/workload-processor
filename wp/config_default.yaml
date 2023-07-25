@@ -44,3 +44,8 @@ processor:
       'FastMixer', 'surfaceflinger', 'writer', 'ElectraPlayer::', 'MediaCodec_loop',
       'RenderEngine', 'mali-compiler', 'mali_jd_thread', 'oid.aac.decoder'
     ]
+notebook:
+  perf_counters: [
+    'cpu-migrations', 'context-switches', 'stalled-cycles-backend', 'page-faults',
+    'major-faults', 'cache-misses', 'instructions', 'cpu-cycles', 'cpu-clock'
+  ]

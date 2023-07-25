@@ -10,6 +10,8 @@ from functools import lru_cache, cached_property
 
 from IPython.display import display
 import plotly.express as px
+import holoviews as hv
+from holoviews import opts
 
 from lisa.wa import WAOutput
 from lisa.stats import Stats
@@ -275,7 +277,7 @@ class WorkloadNotebookPlotter:
 
         self.ana.plot_lines_px(
             self.ana.analysis['pixel6_emeter_mean'], y='power', facet_col='channel',
-            facet_col_wrap=3, height=height, title=title
+            facet_col_wrap=3, height=height, width=width, title=title
         )
 
     def power_meter_bar(self, height=600, width=None, title='Gmean power usage [mW]', include_label=True):
@@ -288,4 +290,137 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['pixel6_emeter_mean'].rename(columns={'power': 'value'}),
             x='channel', y='value', facet_col='metric', facet_col_wrap=5, title=title,
             height=height, width=width, include_total=True, include_columns=['channel']
+        )
+
+    # -------- Overutilized --------
+
+    def _load_overutilized(self):
+        def postprocess_overutil(df):
+            df['time'] = round(df['time'], 2)
+            df['total_time'] = round(df['total_time'], 2)
+            return df
+
+        self.ana.load_combined_analysis('overutilized.pqt', postprocess=postprocess_overutil)
+        log.info('Loaded overutilized into analysis')
+        self.ana.load_combined_analysis('overutilized_mean.pqt')
+        log.info('Loaded overutilized_mean into analysis')
+
+    def overutilized_line(self, height=600, width=None,
+                          title='Overutilized percentage per-iteration', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['overutilized', 'overutilized_mean'], self._load_overutilized)
+
+        self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
+                               title=title, height=height, width=width)
+
+    # -------- Frequency --------
+
+    def _load_frequency(self):
+        def postprocess_freq(df):
+            df['unit'] = 'MHz'
+            df['metric'] = 'frequency'
+            df['order'] = df['cluster'].replace('little', 0).replace('mid', 1).replace('big', 2)
+            return df.sort_values(by=['iteration', 'order']).rename(columns={'frequency': 'value'})
+
+        self.ana.load_combined_analysis('freqs_mean.pqt', postprocess=postprocess_freq)
+        log.info('Loaded freqs_mean into analysis')
+
+    def frequency_line(self, height=600, width=None,
+                       title='Mean cluster frequency across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['freqs_mean'], self._load_frequency)
+
+        self.ana.plot_lines_px(self.ana.analysis['freqs_mean'], facet_col='cluster',
+                               facet_col_wrap=3, title=title, height=height, width=width)
+
+    def frequency_bar(self, height=600, width=None, title='Gmean frequency per cluster', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['freqs_mean'], self._load_frequency)
+
+        self.ana.summary['frequency'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['freqs_mean'], x='metric', y='value', facet_col='cluster', facet_col_wrap=3,
+            title=title, width=width, height=height, order_cluster=True,
+            include_columns=['cluster'])
+
+    # -------- Thermal --------
+
+    def _load_thermal(self):
+        def preprocess_thermal(df):
+            return df.groupby(['iteration', 'kernel', 'wa_path']).mean().reset_index()
+
+        def postprocess_thermal(df):
+            for col in [c for c in df.columns if c not in ['time', 'iteration', 'kernel', 'wa_path']]:
+                df[col] = df[col] / 1000
+            df = round(df, 2)
+            return df
+
+        self.ana.load_combined_analysis('thermal.pqt', preprocess=preprocess_thermal, postprocess=postprocess_thermal)
+        log.info('Loaded thermal into analysis')
+        self.ana.analysis['thermal_melt'] = pd.melt(self.ana.analysis['thermal'],
+                                                    id_vars=['iteration', 'wa_path', 'kernel'],
+                                                    value_vars=['little', 'mid', 'big']
+                                                    ).rename(columns={'variable': 'cluster'})
+        log.info('Loaded thermal_melt into analysis')
+
+    def thermal_line(self, height=600, width=None,
+                     title='Mean cluster temperature across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['thermal', 'thermal_melt'], self._load_thermal)
+
+        self.ana.plot_lines_px(self.ana.analysis['thermal_melt'], facet_col='cluster', height=height, width=width,
+                               facet_col_wrap=3, title=title)
+
+    def thermal_bar(self, height=600, width=None, title='Gmean temperature', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['thermal', 'thermal_melt'], self._load_thermal)
+
+        self.ana.summary['thermal'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['thermal_melt'], x='cluster', y='value',
+            facet_col='metric', facet_col_wrap=2, title=title,
+            width=width, height=height, order_cluster=True, include_columns=['cluster']
+        )
+
+    # -------- Perf --------
+
+    def perf_line(self, counters=None, height=340, width=600,
+                  title='Perf counters across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not counters:
+            counters = self.ana.config['notebook']['perf_counters'].get()
+
+        ds = hv.Dataset(self.ana.results_perf, [
+            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths), hv.Dimension('metric', values=counters)
+        ], 'value')
+        layout = ds.select(metric=counters).to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+            legend_position='bottom'
+        ).layout('metric').opts(shared_axes=False, title=title).cols(3)
+        layout.opts(
+            opts.Curve(width=width, height=height),
+            opts.Overlay(legend_position='bottom'),
+        )
+
+        return layout
+
+    def perf_bar(self, counters=None, height=900, width=None, title='Gmean perf counters', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not counters:
+            counters = self.ana.config['notebook']['perf_counters'].get()
+
+        self.ana.plot_gmean_bars(
+            self.ana.results_perf.query("metric in @counters")[['kernel', 'wa_path', 'iteration', 'metric', 'value']],
+            x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height
         )
