@@ -94,7 +94,8 @@ class WorkloadNotebookAnalysis:
         self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
         self.CLUSTERS_TOTAL = self.CLUSTERS + ['total']
 
-        self.label = self.wa_outputs[0].jobs[0].label
+        self.label = self.wa_outputs[0].jobs[0].label.capitalize()
+        self.workload_label = self.wa_outputs[0].jobs[0].label
         self.plot = WorkloadNotebookPlotter(self)
 
     @cached_property
@@ -753,4 +754,170 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['wakeup_latency_cgroup_quantiles'], x='quantile', y='value', facet_col='cgroup',
             facet_col_wrap=1, title=title, include_columns=['cgroup', 'quantile'],
             table_sort=['quantile', 'cgroup'], width=width, height=height, gmean_round=0
+        )
+
+    # -------- Task CPU residency --------
+
+    def _load_tasks_cpu_residency(self):
+        cpus_prefix = [f"cpu{int(float(x))}" for x in self.ana.CPUS]
+
+        def postprocess_tasks_residency_cpu_total(df):
+            df = df.rename(columns={'Total': 'total'})
+            return df
+
+        self.ana.load_combined_analysis('tasks_residency_cpu_total.pqt',
+                                        postprocess=postprocess_tasks_residency_cpu_total)
+        log.info('Loaded tasks_residency_cpu_total into analysis')
+
+        self.ana.analysis['tasks_residency_cpu_total_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_cpu_total'],
+            id_vars=['iteration', 'wa_path', 'kernel'], value_vars=cpus_prefix
+        ).rename(columns={'variable': 'cpu'}).sort_values(['wa_path', 'kernel', 'iteration', 'cpu'])
+        log.info('Loaded tasks_residency_cpu_total_melt into analysis')
+
+        # TODO: sort by order of clusters
+        self.ana.analysis['tasks_residency_cpu_total_cluster_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_cpu_total'], id_vars=['iteration', 'wa_path', 'kernel'],
+            value_vars=self.ana.CLUSTERS_TOTAL
+        ).rename(columns={'variable': 'cluster'}).sort_values(['wa_path', 'kernel', 'iteration', 'cluster'])
+        log.info('Loaded tasks_residency_cpu_total_cluster_melt into analysis')
+
+        def postprocess_tasks_residency_total(df):
+            tasks_important = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+            if not tasks_important:
+                return df
+            df = df.rename(columns={'Total': 'total'}).query("comm in @tasks_important")
+            return df
+
+        self.ana.load_combined_analysis('tasks_residency_total.pqt', postprocess=postprocess_tasks_residency_total)
+        log.info('Loaded tasks_residency_total into analysis')
+
+        self.ana.analysis['tasks_residency_total_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            value_vars=cpus_prefix
+        ).rename(columns={'variable': 'cpu'}).sort_values(['wa_path', 'kernel', 'iteration', 'cpu'])
+        log.info('Loaded tasks_residency_total_melt into analysis')
+
+        self.ana.analysis['tasks_residency_total_cluster_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            value_vars=self.ana.CLUSTERS_TOTAL
+        ).rename(columns={'variable': 'cluster'}).sort_values(['wa_path', 'kernel', 'iteration', 'cluster'])
+        log.info('Loaded tasks_residency_total_cluster_melt into analysis')
+
+        def postprocess_tasks_residency(df):
+            tasks_important = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+            if not tasks_important:
+                return df
+            df = df.rename(columns={'Total': 'total'}).query("comm in @tasks_important")
+            return df
+
+        self.ana.load_combined_analysis('tasks_residency.pqt', postprocess=postprocess_tasks_residency)
+        log.info('Loaded tasks_residency into analysis')
+
+        self.ana.analysis['tasks_residency_cluster_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            value_vars=self.ana.CLUSTERS_TOTAL
+        ).rename(columns={'variable': 'cluster'})
+        log.info('Loaded tasks_residency_cluster_melt into analysis')
+
+    def tasks_cpu_residency_cluster_line(self, height=600, width=None,
+                                         title='Mean cluster CPU residency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['tasks_residency_cpu_total_cluster_melt'], self._load_tasks_cpu_residency)
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], facet_col='cluster',
+            title=title, height=height, width=width, facet_col_wrap=4
+        )
+
+    def tasks_cpu_residency_cluster_bar(self, height=800, width=None,
+                                        title='Gmean cluster CPU residency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['tasks_residency_cpu_total_cluster_melt'], self._load_tasks_cpu_residency)
+
+        self.ana.summary['tasks_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], x='cluster', y='value', facet_col='metric',
+            facet_col_wrap=1, title=title, include_columns=['cluster'], height=height, width=width, order_cluster=True,
+            include_total=True
+        )
+
+    def tasks_cpu_residency_per_task_bar(self, height=1200, width=None,
+                                         title='Gmean cluster per-task CPU residency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['tasks_residency_total_cluster_melt'], self._load_tasks_cpu_residency)
+
+        self.ana.summary['tasks_cpu_residency_per_task'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['tasks_residency_total_cluster_melt'], x='cluster', y='value', facet_col='comm',
+            facet_col_wrap=1, title=title, include_columns=['cluster'], height=height,
+            width=width, order_cluster=True, include_total=True
+        )
+
+    # TODO: CPUs line plot
+    def tasks_cpu_residency_cpu_bar(self, height=1400, width=None,
+                                    title='Gmean CPU residency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['tasks_residency_total_melt'], self._load_tasks_cpu_residency)
+
+        self.ana.summary['tasks_cpu_residency_cpus'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['tasks_residency_total_melt'], x='cpu', y='value', facet_col='comm',
+            facet_col_wrap=1, title=title, width=width, height=height
+        )
+
+    # -------- cgroup CPU residency --------
+
+    def _load_cgroup_cpu_residency(self):
+        def postprocess_cgroup_task_residency(df):
+            df = df.rename(columns={'Total': 'total'})[
+                ['wa_path', 'cgroup', 'iteration', 'total', 'little', 'mid', 'big'] + self.ana.CPUS
+            ]
+            return df
+
+        self.ana.load_combined_analysis('tasks_residency_cgroup_total.pqt',
+                                        postprocess=postprocess_cgroup_task_residency)
+        log.info('Loaded tasks_residency_cgroup_total into analysis')
+
+        self.ana.analysis['cgroup_residency_total_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'wa_path', 'cgroup'],
+            value_vars=self.ana.CPUS
+        ).rename(columns={'variable': 'cpu'})
+        log.info('Loaded cgroup_residency_total_melt into analysis')
+
+        self.ana.analysis['cgroup_residency_total_cluster_melt'] = pd.melt(
+            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'wa_path', 'cgroup'],
+            value_vars=self.ana.CLUSTERS_TOTAL
+        ).rename(columns={'variable': 'cluster'})
+        log.info('Loaded cgroup_residency_total_cluster_melt into analysis')
+
+    def cgroup_cpu_residency_cluster_bar(self, height=1100, width=None,
+                                         title='Gmean cluster CPU residency per-cgroup', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['cgroup_residency_total_cluster_melt'], self._load_cgroup_cpu_residency)
+
+        self.ana.summary['cgroup_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['cgroup_residency_total_cluster_melt'], x='cluster', y='value', facet_col='cgroup',
+            facet_col_wrap=1, title=title, width=width, height=height,
+            include_columns=['cgroup', 'cluster'], table_sort=['cgroup', 'cluster'],
+            order_cluster=True, include_total=True
+        )
+
+    def cgroup_cpu_residency_cpu_bar(self, height=1100, width=None,
+                                     title='Gmean cgroup CPU residency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['cgroup_residency_total_melt'], self._load_cgroup_cpu_residency)
+
+        self.ana.summary['cgroup_cpu_residency_cpu'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['cgroup_residency_total_melt'], x='cpu', y='value', facet_col='cgroup',
+            facet_col_wrap=1, title='', width=width, height=height, include_columns=['cgroup', 'cpu']
         )
