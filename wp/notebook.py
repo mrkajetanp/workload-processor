@@ -242,6 +242,7 @@ class WorkloadNotebookPlotter:
     def __init__(self, notebook_analysis):
         self.ana = notebook_analysis
 
+    # TODO: detect missing and call processor?
     def _check_load_analysis(self, names, loader):
         if any([d not in self.ana.analysis for d in names]):
             log.debug(f'{names} not found in analysis, trying to load combined analysis')
@@ -311,7 +312,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         self._check_load_analysis(['overutilized', 'overutilized_mean'], self._load_overutilized)
-
+        ptable(self.ana.analysis['overutilized_mean'])
         self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
 
@@ -691,3 +692,65 @@ class WorkloadNotebookPlotter:
         ]['wakeup_latency'].apply(trim_number)
         ptable(self.ana.analysis['wakeup_latency_target_cluster'])
         fig.show(renderer='iframe')
+
+    # -------- Wakeup latency - cgroup --------
+
+    def _load_wakeup_latency_cgroup(self):
+        def postprocess_cgroup_latency(df):
+            df = df.rename(columns={'wakeup_latency': 'value'})
+            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            return df
+
+        self.ana.load_combined_analysis('wakeup_latency_cgroup.pqt', postprocess=postprocess_cgroup_latency)
+        log.info('Loaded wakeup_latency_cgroup into analysis')
+
+        self.ana.analysis['wakeup_latency_cgroup_mean'] = self.ana.analysis['wakeup_latency_cgroup'].groupby(
+            ["wa_path", "cgroup", "iteration", "order"]
+        ).mean(numeric_only=True).reset_index().sort_values(by=["order", "cgroup", "iteration"])[
+            ['wa_path', 'cgroup', 'iteration', 'value', 'order']
+        ]
+        log.info('Loaded wakeup_latency_cgroup_mean into analysis')
+
+        self.ana.analysis['wakeup_latency_cgroup_quantiles'] = self.ana.analysis['wakeup_latency_cgroup'].groupby(
+            ['cgroup', 'wa_path', 'iteration']
+        ).quantile([0.9, 0.95, 0.99], numeric_only=True).reset_index()[
+            ['cgroup', 'wa_path', 'level_3', 'iteration', 'value', 'order']
+        ].rename(columns={'level_3': 'quantile'}).sort_values(by=['cgroup', 'order'])
+        log.info('Loaded wakeup_latency_cgroup_quantiles into analysis')
+
+    def wakeup_latency_cgroup_line(self, height=600, width=None,
+                                   title='cgroup wakeup latencies across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['wakeup_latency_cgroup_mean'], facet_col='cgroup', facet_col_wrap=3,
+            height=height, width=width, title=title
+        )
+
+    def wakeup_latency_cgroup_bar(self, height=600, width=None,
+                                  title='Gmean task wakeup latency per-cgroup', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
+
+        self.ana.summary['wakeup_latency_cgroup'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['wakeup_latency_cgroup_mean'], x='metric', y='value', facet_col='cgroup',
+            title=title, include_columns=['cgroup'], table_sort=['cgroup'], gmean_round=0, width=width, height=height
+        )
+
+    def wakeup_latency_cgroup_quantiles_bar(self, height=1400, width=None,
+                                            title='Gmean latency quantile per-cgroup', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
+
+        self.ana.summary['wakeup_latency_cgroup_quantiles'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['wakeup_latency_cgroup_quantiles'], x='quantile', y='value', facet_col='cgroup',
+            facet_col_wrap=1, title=title, include_columns=['cgroup', 'quantile'],
+            table_sort=['quantile', 'cgroup'], width=width, height=height, gmean_round=0
+        )
