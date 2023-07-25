@@ -18,7 +18,7 @@ from lisa.stats import Stats
 from lisa.platforms.platinfo import PlatformInfo
 from lisa.utils import LazyMapping
 
-from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten
+from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten, cpu_cluster
 from wp.constants import APP_NAME
 
 
@@ -573,3 +573,121 @@ class WorkloadNotebookPlotter:
             facet_col='variable', facet_col_wrap=1, title=title,
             width=width, height=height, order_cluster=True, include_columns=['cluster']
         )
+
+    # -------- Wakeup latency --------
+
+    def _load_wakeup_latency(self):
+        def postprocess_wakeup_latency_mean(df):
+            df = df.rename(columns={'wakeup_latency': 'value'})
+            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            df['unit'] = 'x'
+            return df
+
+        self.ana.load_combined_analysis('wakeup_latency_mean.pqt', postprocess=postprocess_wakeup_latency_mean)
+        log.info('Loaded wakeup_latency_mean into analysis')
+
+        def postprocess_wakeup_latency(df):
+            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            df['cluster'] = df['cpu'].copy().apply(cpu_cluster)
+            df['order_cluster'] = df['cluster'].map(lambda x: self.ana.CLUSTERS.index(x))
+            df['target_cluster'] = df['target_cpu'].copy().apply(cpu_cluster)
+            df['order_target_cluster'] = df['target_cluster'].map(lambda x: self.ana.CLUSTERS.index(x))
+            return df
+
+        self.ana.load_combined_analysis('wakeup_latency.pqt', postprocess=postprocess_wakeup_latency)
+        log.info('Loaded wakeup_latency into analysis')
+
+        self.ana.analysis['wakeup_latency_quantiles'] = self.ana.analysis['wakeup_latency'].groupby([
+            'comm', 'wa_path', 'iteration'
+        ]).quantile([0.9, 0.95, 0.99], numeric_only=True).reset_index()[
+            ['comm', 'wa_path', 'level_3', 'iteration', 'wakeup_latency', 'order']
+        ].rename(columns={'level_3': 'quantile'}).sort_values(by=['comm', 'order'])
+        log.info('Loaded wakeup_latency_quantiles into analysis')
+
+        self.ana.analysis['wakeup_latency_execution_cluster'] = self.ana.analysis['wakeup_latency'].groupby([
+            'comm', 'wa_path', 'cluster'
+        ]).mean(numeric_only=True).reset_index().sort_values(by=['comm', 'order_cluster', 'order'])[
+            ['comm', 'wa_path', 'cluster', 'wakeup_latency']
+        ]
+        log.info('Loaded wakeup_latency_execution_cluster into analysis')
+
+        self.ana.analysis['wakeup_latency_target_cluster'] = self.ana.analysis['wakeup_latency'].groupby([
+            'comm', 'wa_path', 'target_cluster'
+        ]).mean(numeric_only=True).reset_index().sort_values(by=['comm', 'order_target_cluster', 'order'])[
+            ['comm', 'wa_path', 'target_cluster', 'wakeup_latency']
+        ]
+        log.info('Loaded wakeup_latency_target_cluster into analysis')
+
+    def wakeup_latency_line(self, height=600, width=None,
+                            title='Task wakeup latencies across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+        self._check_load_analysis(['wakeup_latency_mean'], self._load_wakeup_latency)
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['wakeup_latency_mean'], facet_col='comm',
+            facet_col_wrap=3, height=height, width=width, title=title
+        )
+
+    def wakeup_latency_bar(self, height=600, width=None,
+                           title='Gmean task wakeup latency', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_mean'], self._load_wakeup_latency)
+
+        self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=3,
+            title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height
+        )
+
+    def wakeup_latency_quantiles_bar(self, height=1300, width=None,
+                                     title='Gmean latency quantile', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_quantiles'], self._load_wakeup_latency)
+
+        self.ana.summary['wakeup_latency_quantiles'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['wakeup_latency_quantiles'].rename(columns={'wakeup_latency': 'value'}),
+            x='quantile', y='value', facet_col='comm', facet_col_wrap=1, title=title,
+            width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0
+        )
+
+    def wakeup_latency_execution_cluster_bar(self, height=1300, width=None, include_label=True,
+                                             title='Mean task wakeup latency per execution cluster'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_execution_cluster'], self._load_wakeup_latency)
+
+        fig = px.bar(
+            self.ana.analysis['wakeup_latency_execution_cluster'], x='cluster', y='wakeup_latency', color='wa_path',
+            facet_col='comm', barmode='group', facet_col_wrap=1, width=width, height=height, title=title,
+            text=self.ana.analysis['wakeup_latency_execution_cluster']['wakeup_latency'].apply(trim_number),
+        )
+        fig.update_traces(textposition='outside')
+        self.ana.analysis['wakeup_latency_execution_cluster']['wakeup_latency'] = self.ana.analysis[
+            'wakeup_latency_execution_cluster'
+        ]['wakeup_latency'].apply(trim_number)
+        ptable(self.ana.analysis['wakeup_latency_execution_cluster'])
+        fig.show(renderer='iframe')
+
+    def wakeup_latency_target_cluster_bar(self, height=1300, width=None, include_label=True,
+                                          title='Mean task wakeup latency per target cluster'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self._check_load_analysis(['wakeup_latency_target_cluster'], self._load_wakeup_latency)
+
+        fig = px.bar(
+            self.ana.analysis['wakeup_latency_target_cluster'], x='target_cluster', y='wakeup_latency', color='wa_path',
+            facet_col='comm', barmode='group', facet_col_wrap=1, width=width, height=height, title=title,
+            text=self.ana.analysis['wakeup_latency_target_cluster']['wakeup_latency'].apply(trim_number),
+        )
+        fig.update_traces(textposition='outside')
+        self.ana.analysis['wakeup_latency_target_cluster']['wakeup_latency'] = self.ana.analysis[
+            'wakeup_latency_target_cluster'
+        ]['wakeup_latency'].apply(trim_number)
+        ptable(self.ana.analysis['wakeup_latency_target_cluster'])
+        fig.show(renderer='iframe')
