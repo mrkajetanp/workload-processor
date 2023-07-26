@@ -273,6 +273,9 @@ class WorkloadNotebookPlotter:
             'jb_mean_frame_duration': self._load_jankbench,
             'jankbench': self._load_jankbench,
             'jankbench_percs': self._load_jankbench,
+            'adpf': self._load_drarm_adpf,
+            'adpf_totals': self._load_drarm_adpf,
+            'adpf_totals_melt': self._load_drarm_adpf,
         }
         return mapping[analysis]
 
@@ -486,6 +489,63 @@ class WorkloadNotebookPlotter:
             self.ana.results.query("metric == 'mean'"),
             x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
             title=title, width=width, height=height
+        )
+
+    # -------- DrArm ADPF --------
+
+    def _load_drarm_adpf(self):
+        def preproces_adpf(df):
+            return df.reset_index().rename(columns={'index': 'ts'})
+
+        self.ana.load_combined_analysis('adpf.pqt', preprocess=preproces_adpf)
+        log.info('Loaded adpf into analysis')
+        self.ana.load_combined_analysis('adpf_totals.pqt')
+        log.info('Loaded adpf_totals into analysis')
+        self.ana.analysis['adpf_totals_melt'] = pd.melt(
+            self.ana.analysis['adpf_totals'], id_vars=['iteration', 'wa_path'],
+            value_vars=['average fps', 'frame count']
+        )
+
+        self.ana.ds_adpf = hv.Dataset(
+            self.ana.analysis['adpf'].reset_index(), ['ts', hv.Dimension('wa_path', values=self.ana.wa_paths)], [
+                'average fps', 'sigma fps', 'thermal status',
+                'Adaptive Batching', 'sn_Adaptive Batching', 'Adaptive Decals',
+                'sn_Adaptive Decals', 'Adaptive Framerate', 'sn_Adaptive Framerate',
+                'Adaptive LOD', 'sn_Adaptive LOD', 'Adaptive Lut', 'sn_Adaptive Lut',
+                'Adaptive MSAA', 'sn_Adaptive MSAA', 'Adaptive Resolution',
+                'sn_Adaptive Resolution', 'Adaptive Shadow Cascade',
+                'sn_Adaptive Shadow Cascade', 'Adaptive Shadow Distance',
+                'sn_Adaptive Shadow Distance', 'Adaptive Shadowmap Resolution',
+                'sn_Adaptive Shadowmap Resolution', 'Adaptive Shadow Quality',
+                'sn_Adaptive Shadow Quality', 'Adaptive Transparency',
+                'sn_Adaptive Transparency', 'Adaptive View Distance',
+                'sn_Adaptive View Distance', 'Adaptive Sorting', 'sn_Adaptive Sorting',
+                'Adaptive Physics', 'sn_Adaptive Physics', 'Adaptive Layer Culling',
+                'sn_Adaptive Layer Culling', 'Adaptive Fog', 'sn_Adaptive Fog'
+            ]
+        )
+
+    @requires_analysis(['adpf_totals_melt'])
+    def drarm_adpf_fps_line(self, height=600, width=None,
+                            title='FPS & frame count across iterations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.plot_lines_px(
+            self.ana.analysis['adpf_totals_melt'], facet_col='variable', title=title,
+            height=height, width=width
+        )
+
+    @requires_analysis(['adpf_totals_melt'])
+    def drarm_adpf_fps_bar(self, height=600, width=None,
+                           title='Gmean iteration FPS & total frames', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.summary['drarm_adpf_fps'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['adpf_totals_melt'], x='metric', y='value', facet_col='variable',
+            facet_col_wrap=5, title=title, height=height, width=width, include_columns=['variable'],
+            table_sort=['variable', 'kernel']
         )
 
     # -------- TLDR --------
