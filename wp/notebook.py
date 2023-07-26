@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import polars as pl
 import scipy as sp
 import logging as log
 import confuse
@@ -55,7 +56,7 @@ def trim_wa_path(path):
 
 
 class WorkloadNotebookAnalysis:
-    def __init__(self, benchmark_path, benchmark_dirs):
+    def __init__(self, benchmark_path, benchmark_dirs, label=None):
         self.benchmark_path = benchmark_path
         self.benchmark_dirs = benchmark_dirs
 
@@ -94,7 +95,7 @@ class WorkloadNotebookAnalysis:
         self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
         self.CLUSTERS_TOTAL = self.CLUSTERS + ['total']
 
-        self.label = self.wa_outputs[0].jobs[0].label.capitalize()
+        self.label = self.wa_outputs[0].jobs[0].label.capitalize() if not label else label
         self.workload_label = self.wa_outputs[0].jobs[0].label
         self.plot = WorkloadNotebookPlotter(self)
 
@@ -251,6 +252,41 @@ class WorkloadNotebookPlotter:
 
         if any([d not in self.ana.analysis for d in names]):
             log.error(f"{names} failed to load into analysis using {loader.__name__}")
+
+    # -------- Results --------
+    def results_line(self, metrics, height=600, width=900, columns=2,
+                     title='Benchmark score per-iteration', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        metrics = sorted(metrics)
+
+        ds = hv.Dataset(
+            self.ana.results,
+            ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths),
+             hv.Dimension('metric', values=metrics)], 'value'
+        )
+        layout = ds.select(metric=metrics).to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+            legend_position='bottom'
+        ).layout('metric').opts(shared_axes=False, title=title).cols(columns)
+        layout.opts(
+            opts.Curve(height=height, width=width),
+        )
+        return layout
+
+    def results_bar(self, metrics, height=600, width=None, columns=2,
+                    title='gmean benchmark score', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        data = pl.from_pandas(self.ana.results).filter(
+            pl.col('metric').is_in(metrics)
+        ).to_pandas()
+
+        self.ana.summary['results'] = self.ana.plot_gmean_bars(
+            data, x='stat', y='value', facet_col='metric',
+            facet_col_wrap=columns, title=title, width=width, height=height
+        )
 
     # -------- Power Meter (pixel6_emeter) --------
 
