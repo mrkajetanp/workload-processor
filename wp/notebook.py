@@ -254,6 +254,7 @@ class WorkloadNotebookPlotter:
             log.error(f"{names} failed to load into analysis using {loader.__name__}")
 
     # -------- Results --------
+
     def results_line(self, metrics, height=600, width=900, columns=2,
                      title='Benchmark score per-iteration', include_label=True):
         if include_label:
@@ -287,6 +288,74 @@ class WorkloadNotebookPlotter:
             data, x='stat', y='value', facet_col='metric',
             facet_col_wrap=columns, title=title, width=width, height=height
         )
+
+    # -------- TLDR --------
+
+    def summary(self):
+        parts = []
+
+        if 'results' in self.ana.summary:
+            if self.ana.workload_label == 'geekbench':
+                scores = self.ana.summary['results'].copy()
+                scores['perc_diff'] = scores['perc_diff'].apply(lambda s: f"({s})")
+                scores['value'] = scores['value'] + " " + scores['perc_diff']
+                scores = scores.pivot(values='value', columns='kernel', index='metric').reset_index()[
+                    ['metric'] + self.ana.wa_paths
+                ]
+                parts.append(scores)
+
+        if 'power_usage' in self.ana.summary:
+            power_usage = self.ana.summary['power_usage'].copy().query("channel == 'CPU'")
+            power_usage['perc_diff'] = power_usage['perc_diff'].apply(lambda s: f"({s})")
+            power_usage['value'] = power_usage['value'] + " " + power_usage['perc_diff']
+            power_usage['channel'] = 'CPU_total_power'
+            power_usage = power_usage.pivot(values='value', columns='kernel', index='channel').reset_index().rename(
+                columns={'channel': 'metric'}
+            )[['metric'] + self.ana.wa_paths]
+            parts.append(power_usage)
+
+        if 'overutilized_mean' in self.ana.analysis:
+            ou = self.ana.analysis['overutilized_mean'].copy()
+            ou['percentage'] = ou['percentage'].apply(lambda x: f"{x}%")
+            ou = ou.pivot(values='percentage', columns='wa_path', index='metric').reset_index()[
+                ['metric'] + self.ana.wa_paths
+            ]
+            parts.append(ou)
+
+        if 'thermal' in self.ana.summary:
+            thermal = self.ana.summary['thermal'].copy()
+            thermal['perc_diff'] = thermal['perc_diff'].apply(lambda s: f"({s})")
+            thermal['value'] = thermal['value'] + " " + thermal['perc_diff']
+            thermal = thermal.pivot(values='value', columns='kernel', index='cluster').reset_index().rename(
+                columns={'cluster': 'metric'}
+            )[['metric'] + self.ana.wa_paths]
+            thermal['metric'] = "thermal (" + thermal['metric'] + ")"
+            parts.append(thermal)
+
+        if 'wakeup_latency' in self.ana.summary:
+            wakeup_latency = self.ana.summary['wakeup_latency'].copy()
+            wakeup_latency['perc_diff'] = wakeup_latency['perc_diff'].apply(lambda s: f"({s})")
+            wakeup_latency['comm'] = "latency (" + wakeup_latency['comm'] + ")"
+            wakeup_latency['value'] = wakeup_latency['value'] + " " + wakeup_latency['perc_diff']
+            wakeup_latency = wakeup_latency.pivot(values='value', columns='kernel', index='comm').reset_index().rename(
+                columns={'comm': 'metric'}
+            )[['metric'] + self.ana.wa_paths]
+            parts.append(wakeup_latency)
+
+        if 'tasks_cpu_residency_per_task' in self.ana.summary:
+            task_cpu_res = self.ana.summary['tasks_cpu_residency_per_task'].copy().query("cluster == 'total'")
+            task_cpu_res['perc_diff'] = task_cpu_res['perc_diff'].apply(lambda s: f"({s})")
+            task_cpu_res['value'] = task_cpu_res['value'] + " " + task_cpu_res['perc_diff']
+            task_cpu_res = task_cpu_res.pivot(values='value', columns='kernel', index='comm').reset_index().rename(
+                columns={'comm': 'metric'}
+            )[['metric'] + self.ana.wa_paths]
+            task_cpu_res['metric'] = "CPU residency (" + task_cpu_res['metric'] + ")"
+            parts.append(task_cpu_res)
+
+        summary = pd.concat(parts).reset_index(drop=True)
+
+        print(self.ana.label)
+        ptable(summary)
 
     # -------- Power Meter (pixel6_emeter) --------
 
