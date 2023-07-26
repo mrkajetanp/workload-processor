@@ -496,14 +496,13 @@ class WorkloadNotebookPlotter:
         # --- Results ---
 
         if 'results' in self.ana.summary:
-            if self.ana.workload_label == 'geekbench':
-                scores = self.ana.summary['results'].copy()
-                scores['perc_diff'] = scores['perc_diff'].apply(lambda s: f"({s})")
-                scores['value'] = scores['value'] + " " + scores['perc_diff']
-                scores = scores.pivot(values='value', columns='kernel', index='metric').reset_index()[
-                    ['metric'] + self.ana.wa_paths
-                ]
-                parts.append(scores)
+            scores = self.ana.summary['results'].copy()
+            scores['perc_diff'] = scores['perc_diff'].apply(lambda s: f"({s})")
+            scores['value'] = scores['value'] + " " + scores['perc_diff']
+            scores = scores.pivot(values='value', columns='kernel', index='metric').reset_index()[
+                ['metric'] + self.ana.wa_paths
+            ]
+            parts.append(scores)
 
         # --- Jankbench ---
 
@@ -948,36 +947,36 @@ class WorkloadNotebookPlotter:
         log.info('Loaded wakeup_latency_target_cluster into analysis')
 
     @requires_analysis(['wakeup_latency_mean'])
-    def wakeup_latency_line(self, height=600, width=None,
+    def wakeup_latency_line(self, height=600, width=None, columns=3,
                             title='Task wakeup latencies across iterations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.plot_lines_px(
             self.ana.analysis['wakeup_latency_mean'], facet_col='comm',
-            facet_col_wrap=3, height=height, width=width, title=title
+            facet_col_wrap=columns, height=height, width=width, title=title
         )
 
     @requires_analysis(['wakeup_latency_mean'])
-    def wakeup_latency_bar(self, height=600, width=None,
+    def wakeup_latency_bar(self, height=600, width=None, columns=3,
                            title='Gmean task wakeup latency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
-            self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=3,
+            self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=columns,
             title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height
         )
 
     @requires_analysis(['wakeup_latency_quantiles'])
-    def wakeup_latency_quantiles_bar(self, height=1300, width=None,
+    def wakeup_latency_quantiles_bar(self, height=1300, width=None, columns=1,
                                      title='Gmean latency quantile', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency_quantiles'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_quantiles'].rename(columns={'wakeup_latency': 'value'}),
-            x='quantile', y='value', facet_col='comm', facet_col_wrap=1, title=title,
+            x='quantile', y='value', facet_col='comm', facet_col_wrap=columns, title=title,
             width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0
         )
 
@@ -1141,50 +1140,50 @@ class WorkloadNotebookPlotter:
         log.info('Loaded tasks_residency_cluster_melt into analysis')
 
     @requires_analysis(['tasks_residency_cpu_total_cluster_melt'])
-    def tasks_cpu_residency_cluster_line(self, height=600, width=None,
+    def tasks_cpu_residency_cluster_line(self, height=600, width=None, columns=4,
                                          title='Mean cluster CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.plot_lines_px(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], facet_col='cluster',
-            title=title, height=height, width=width, facet_col_wrap=4
+            title=title, height=height, width=width, facet_col_wrap=columns
         )
 
     @requires_analysis(['tasks_residency_cpu_total_cluster_melt'])
-    def tasks_cpu_residency_cluster_bar(self, height=800, width=None,
+    def tasks_cpu_residency_cluster_bar(self, height=800, width=None, columns=1,
                                         title='Gmean cluster CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['tasks_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], x='cluster', y='value', facet_col='metric',
-            facet_col_wrap=1, title=title, include_columns=['cluster'], height=height, width=width, order_cluster=True,
-            include_total=True
+            facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height, width=width,
+            order_cluster=True, include_total=True
         )
 
     @requires_analysis(['tasks_residency_total_cluster_melt'])
-    def tasks_cpu_residency_per_task_bar(self, height=1200, width=None,
+    def tasks_cpu_residency_per_task_bar(self, height=1200, width=None, columns=1,
                                          title='Gmean cluster per-task CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['tasks_cpu_residency_per_task'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_cluster_melt'], x='cluster', y='value', facet_col='comm',
-            facet_col_wrap=1, title=title, include_columns=['cluster'], height=height,
+            facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height,
             width=width, order_cluster=True, include_total=True
         )
 
     # TODO: CPUs line plot
     @requires_analysis(['tasks_residency_total_melt'])
-    def tasks_cpu_residency_cpu_bar(self, height=1400, width=None,
+    def tasks_cpu_residency_cpu_bar(self, height=1400, width=None, columns=1,
                                     title='Gmean CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['tasks_cpu_residency_cpus'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_melt'], x='cpu', y='value', facet_col='comm',
-            facet_col_wrap=1, title=title, width=width, height=height
+            facet_col_wrap=columns, title=title, width=width, height=height
         )
 
     # -------- cgroup CPU residency --------
