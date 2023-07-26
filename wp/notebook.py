@@ -548,6 +548,23 @@ class WorkloadNotebookPlotter:
             table_sort=['variable', 'kernel']
         )
 
+    @requires_analysis(['adpf_totals_melt'])
+    def drarm_adpf_metric_line(self, metrics, height=600, width=1000, title='ADPF', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        layout = hv.Layout([
+            self.ana.ds_adpf.to(hv.Curve, 'ts', metrics[0]).overlay('wa_path').opts(
+                legend_position='bottom'
+            ).opts(shared_axes=False, title=f"{title} {metric}")
+            for metric in metrics
+        ])
+
+        layout.opts(
+            opts.Curve(height=height, width=width, title=title),
+        )
+        return layout
+
     # -------- TLDR --------
 
     def summary(self):
