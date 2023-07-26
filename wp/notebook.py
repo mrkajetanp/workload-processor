@@ -18,6 +18,7 @@ from lisa.wa import WAOutput
 from lisa.stats import Stats
 from lisa.platforms.platinfo import PlatformInfo
 from lisa.utils import LazyMapping
+from lisa.datautils import series_mean
 
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten, cpu_cluster
 from wp.constants import APP_NAME
@@ -268,6 +269,10 @@ class WorkloadNotebookPlotter:
             'tasks_residency_total_melt': self._load_tasks_cpu_residency,
             'cgroup_residency_total_cluster_melt': self._load_cgroup_cpu_residency,
             'cgroup_residency_total_melt': self._load_cgroup_cpu_residency,
+            'jb_max_frame_duration': self._load_jankbench,
+            'jb_mean_frame_duration': self._load_jankbench,
+            'jankbench': self._load_jankbench,
+            'jankbench_percs': self._load_jankbench,
         }
         return mapping[analysis]
 
@@ -323,10 +328,172 @@ class WorkloadNotebookPlotter:
             facet_col_wrap=columns, title=title, width=width, height=height
         )
 
+    # -------- Jankbench --------
+
+    def _load_jankbench(self):
+        self.ana.analysis['jankbench'] = pd.concat([wa_output['jankbench'].df for wa_output in self.ana.wa_outputs])
+        self.ana.analysis['jankbench']['wa_path'] = self.ana.analysis['jankbench']['wa_path'].map(trim_wa_path)
+        log.info('Loaded jankbench into analysis')
+
+        self.ana.analysis['jb_max_frame_duration'] = self.ana.analysis['jankbench'].query(
+            "variable == 'total_duration'"
+        )[["wa_path", "iteration", "value"]].groupby(["wa_path"]).max().reset_index()
+        self.ana.analysis['jb_max_frame_duration']['variable'] = 'max_frame_duration'
+        log.info('Loaded jb_max_frame_duration into analysis')
+
+        self.ana.analysis['jb_mean_frame_duration'] = self.ana.analysis['jankbench'].query(
+            "variable == 'total_duration'"
+        )[["wa_path", "iteration", "value"]].groupby(
+            ["wa_path", "iteration"]
+        ).agg(lambda x: series_mean(x)).reset_index()
+        self.ana.analysis['jb_mean_frame_duration']['variable'] = 'mean_frame_duration'
+        log.info('Loaded jb_mean_frame_duration into analysis')
+
+        self.ana.analysis['jankbench_percs'] = self.ana.analysis['jankbench'].query("variable == 'jank_frame'").groupby(
+            ['wa_path', 'iteration']
+        ).size().reset_index().rename(columns={0: 'count'})
+        self.ana.analysis['jankbench_percs']['jank_count'] = self.ana.analysis['jankbench'].query(
+            "variable == 'jank_frame' and value == 1.0"
+        ).groupby(['wa_path', 'iteration']).size().reset_index().rename(columns={0: 'count'})['count']
+        self.ana.analysis['jankbench_percs']['perc'] = round(
+            self.ana.analysis['jankbench_percs']['jank_count'] / self.ana.analysis['jankbench_percs']['count'] * 100, 2
+        )
+        self.ana.analysis['jankbench_percs']['variable'] = 'jank_percentage'
+        log.info('Loaded jankbench_percs into analysis')
+
+    @requires_analysis(['jb_max_frame_duration'])
+    def jankbench_max_frame_durations(self, height=600, width=1000, columns=2,
+                                      title='Max frame durations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.summary['jb_max_frame_duration'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['jb_max_frame_duration'], x='variable', y='value',
+            title=title, width=width, height=height
+        )
+
+    @requires_analysis(['jb_mean_frame_duration'])
+    def jankbench_mean_frame_durations_line(self, height=600, width=1500,
+                                            title='Mean frame duration per-iteration', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        ds = hv.Dataset(self.ana.analysis['jb_mean_frame_duration'], [
+            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths)
+        ], 'value')
+        layout = ds.to(hv.Curve, 'iteration',
+                       'value').overlay('wa_path').opts(legend_position='bottom').opts(shared_axes=False, title=title)
+        layout.opts(
+            opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
+        )
+        return layout
+
+    @requires_analysis(['jb_mean_frame_duration'])
+    def jankbench_mean_frame_durations_bar(self, height=600, width=1000,
+                                           title='gmean frame durations', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.summary['jb_mean_frame_duration'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['jb_mean_frame_duration'], x='variable', y='value',
+            title=title, width=width, height=height
+        )
+
+    @requires_analysis(['jankbench'])
+    def jankbench_frame_durations_hist(self, height=800, width=None,
+                                       title='Frame duration histogram', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        fig = px.histogram(
+            self.ana.analysis['jankbench'].query("variable == 'total_duration'"), x='value',
+            color='wa_path', barmode='group', nbins=40, height=height, width=width, title=title
+        )
+        fig.show(renderer='iframe')
+
+    @requires_analysis(['jankbench'])
+    def jankbench_frame_durations_ecdf(self, height=800, width=None,
+                                       title='Frame duration ecdf', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        fig = px.ecdf(
+            self.ana.analysis['jankbench'].query("variable == 'total_duration'"),
+            x='value', color='wa_path', height=height, width=width, title=title
+        )
+        fig.show(renderer='iframe')
+
+    @requires_analysis(['jankbench_percs'])
+    def jankbench_jank_percentage_line(self, height=600, width=1500,
+                                       title='jank percentage per-iteration', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        ds = hv.Dataset(self.ana.analysis['jankbench_percs'],
+                        ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths)], 'perc')
+        layout = ds.to(hv.Curve, 'iteration',
+                       'perc').overlay('wa_path').opts(legend_position='bottom').opts(shared_axes=False, title=title)
+        layout.opts(
+            opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
+        )
+        return layout
+
+    @requires_analysis(['jankbench_percs'])
+    def jankbench_jank_percentage_bar(self, height=600, width=1000,
+                                      title='gmean jank percentage', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.summary['jankbench_percs'] = self.ana.plot_gmean_bars(
+            self.ana.analysis['jankbench_percs'].rename(columns={'perc': 'value'})[
+                ['wa_path', 'iteration', 'value', 'variable']
+            ], x='variable', y='value', title=title, width=width, height=height
+        )
+
+    def jankbench_metric_line(self, height=600, width=500, columns=3,
+                              title='Metric per-iteration', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        ds = hv.Dataset(self.ana.results, [
+            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths), 'test_name', 'metric'
+        ], 'value')
+        layout = ds.to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+            legend_position='bottom'
+        ).layout('test_name').opts(shared_axes=False, title=title).cols(columns)
+        layout.opts(
+            opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
+        )
+        return layout
+
+    def jankbench_jank_percentage_metric_bar(self, height=1000, width=None, columns=4,
+                                             title='gmean jank percentage per-metric', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.plot_gmean_bars(
+            self.ana.results.query("metric == 'jank_p'"),
+            x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
+            title=title, width=width, height=height
+        )
+
+    def jankbench_mean_duration_metric_bar(self, height=1000, width=None, columns=4,
+                                           title='gmean frame duration per-metric', include_label=True):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        self.ana.plot_gmean_bars(
+            self.ana.results.query("metric == 'mean'"),
+            x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
+            title=title, width=width, height=height
+        )
+
     # -------- TLDR --------
 
     def summary(self):
         parts = []
+
+        # --- Results ---
 
         if 'results' in self.ana.summary:
             if self.ana.workload_label == 'geekbench':
@@ -337,6 +504,35 @@ class WorkloadNotebookPlotter:
                     ['metric'] + self.ana.wa_paths
                 ]
                 parts.append(scores)
+
+        # --- Jankbench ---
+
+        if 'jb_mean_frame_duration' in self.ana.summary:
+            mean_durations = self.ana.summary['jb_mean_frame_duration'].copy()
+            mean_durations['perc_diff'] = mean_durations['perc_diff'].apply(lambda s: f"({s})")
+            mean_durations['value'] = mean_durations['value'] + " " + mean_durations['perc_diff']
+            mean_durations = mean_durations.pivot(
+                values='value', columns='kernel', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+            parts.append(mean_durations)
+
+        if 'jankbench_percs' in self.ana.summary:
+            jankbench_percs = self.ana.summary['jankbench_percs'].copy()
+            jankbench_percs['perc_diff'] = jankbench_percs['perc_diff'].apply(lambda s: f"({s})")
+            jankbench_percs['value'] = jankbench_percs['value'] + " " + jankbench_percs['perc_diff']
+            jankbench_percs = jankbench_percs.pivot(
+                values='value', columns='kernel', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+            parts.append(jankbench_percs)
+
+        if 'jb_max_frame_duration' in self.ana.summary:
+            summary_max_durations = self.ana.summary['jb_max_frame_duration'].copy()
+            summary_max_durations = summary_max_durations.pivot(
+                values='value', columns='kernel', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+            parts.append(summary_max_durations)
+
+        # --- Trace metrics ---
 
         if 'power_usage' in self.ana.summary:
             power_usage = self.ana.summary['power_usage'].copy().query("channel == 'CPU'")
