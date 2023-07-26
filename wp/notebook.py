@@ -244,14 +244,48 @@ class WorkloadNotebookPlotter:
     def __init__(self, notebook_analysis):
         self.ana = notebook_analysis
 
-    # TODO: detect missing and call processor?
-    def _check_load_analysis(self, names, loader):
-        if any([d not in self.ana.analysis for d in names]):
-            log.debug(f'{names} not found in analysis, trying to load combined analysis')
-            loader()
+    def _analysis_to_loader(self, analysis):
+        mapping = {
+            'pixel6_emeter': self._load_power_meter,
+            'pixel6_emeter_mean': self._load_power_meter,
+            'overutilized': self._load_overutilized,
+            'overutilized_mean': self._load_overutilized,
+            'freqs_mean': self._load_frequency,
+            'thermal': self._load_thermal,
+            'thermal_melt': self._load_thermal,
+            'idle_residency': self._load_idle_residency,
+            'cpu_idle_miss_counts': self._load_idle_miss,
+            'energy_estimate_melt': self._load_energy_estimate,
+            'sched_pelt_cfs_mean': self._load_sched_pelt_cfs,
+            'wakeup_latency_mean': self._load_wakeup_latency,
+            'wakeup_latency_quantiles': self._load_wakeup_latency,
+            'wakeup_latency_execution_cluster': self._load_wakeup_latency,
+            'wakeup_latency_target_cluster': self._load_wakeup_latency,
+            'wakeup_latency_cgroup_mean': self._load_wakeup_latency_cgroup,
+            'wakeup_latency_cgroup_quantiles': self._load_wakeup_latency_cgroup,
+            'tasks_residency_cpu_total_cluster_melt': self._load_tasks_cpu_residency,
+            'tasks_residency_total_cluster_melt': self._load_tasks_cpu_residency,
+            'tasks_residency_total_melt': self._load_tasks_cpu_residency,
+            'cgroup_residency_total_cluster_melt': self._load_cgroup_cpu_residency,
+            'cgroup_residency_total_melt': self._load_cgroup_cpu_residency,
+        }
+        return mapping[analysis]
 
-        if any([d not in self.ana.analysis for d in names]):
-            log.error(f"{names} failed to load into analysis using {loader.__name__}")
+    # TODO: detect missing and call processor?
+    def requires_analysis(names):
+        def wrapper(func):
+            def inner(self, *args, **kwargs):
+                if any([d not in self.ana.analysis for d in names]):
+                    log.debug(f'{names} not found in analysis, trying to load combined analysis')
+                    loader = self._analysis_to_loader(names[0])
+                    loader()
+
+                if any([d not in self.ana.analysis for d in names]):
+                    log.error(f"Failed to load {names} into analysis using {loader.__name__}")
+
+                return func(self, *args, **kwargs)
+            return inner
+        return wrapper
 
     # -------- Results --------
 
@@ -375,23 +409,21 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('pixel6_emeter_mean.pqt', postprocess=postprocess_pixel6_emeter_means)
         log.info('Loaded pixel6_emeter_mean into analysis')
 
+    @requires_analysis(['pixel6_emeter_mean'])
     def power_meter_line(self, height=1000, width=None,
                          title='Mean power usage across iterations [mW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['pixel6_emeter', 'pixel6_emeter_mean'], self._load_power_meter)
 
         self.ana.plot_lines_px(
             self.ana.analysis['pixel6_emeter_mean'], y='power', facet_col='channel',
             facet_col_wrap=3, height=height, width=width, title=title
         )
 
+    @requires_analysis(['pixel6_emeter_mean'])
     def power_meter_bar(self, height=600, width=None, title='Gmean power usage [mW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['pixel6_emeter', 'pixel6_emeter_mean'], self._load_power_meter)
 
         self.ana.summary['power_usage'] = self.ana.plot_gmean_bars(
             self.ana.analysis['pixel6_emeter_mean'].rename(columns={'power': 'value'}),
@@ -412,12 +444,12 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('overutilized_mean.pqt')
         log.info('Loaded overutilized_mean into analysis')
 
+    @requires_analysis(['overutilized', 'overutilized_mean'])
     def overutilized_line(self, height=600, width=None,
                           title='Overutilized percentage per-iteration', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self._check_load_analysis(['overutilized', 'overutilized_mean'], self._load_overutilized)
         ptable(self.ana.analysis['overutilized_mean'])
         self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
@@ -434,21 +466,19 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('freqs_mean.pqt', postprocess=postprocess_freq)
         log.info('Loaded freqs_mean into analysis')
 
+    @requires_analysis(['freqs_mean'])
     def frequency_line(self, height=600, width=None,
                        title='Mean cluster frequency across iterations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self._check_load_analysis(['freqs_mean'], self._load_frequency)
-
         self.ana.plot_lines_px(self.ana.analysis['freqs_mean'], facet_col='cluster',
                                facet_col_wrap=3, title=title, height=height, width=width)
 
+    @requires_analysis(['freqs_mean'])
     def frequency_bar(self, height=600, width=None, title='Gmean frequency per cluster', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['freqs_mean'], self._load_frequency)
 
         self.ana.summary['frequency'] = self.ana.plot_gmean_bars(
             self.ana.analysis['freqs_mean'], x='metric', y='value', facet_col='cluster', facet_col_wrap=3,
@@ -475,21 +505,19 @@ class WorkloadNotebookPlotter:
                                                     ).rename(columns={'variable': 'cluster'})
         log.info('Loaded thermal_melt into analysis')
 
+    @requires_analysis(['thermal_melt'])
     def thermal_line(self, height=600, width=None,
                      title='Mean cluster temperature across iterations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self._check_load_analysis(['thermal', 'thermal_melt'], self._load_thermal)
-
         self.ana.plot_lines_px(self.ana.analysis['thermal_melt'], facet_col='cluster', height=height, width=width,
                                facet_col_wrap=3, title=title)
 
+    @requires_analysis(['thermal_melt'])
     def thermal_bar(self, height=600, width=None, title='Gmean temperature', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['thermal', 'thermal_melt'], self._load_thermal)
 
         self.ana.summary['thermal'] = self.ana.plot_gmean_bars(
             self.ana.analysis['thermal_melt'], x='cluster', y='value',
@@ -542,11 +570,10 @@ class WorkloadNotebookPlotter:
         self.ana.analysis['idle_residency']['time'] = round(self.ana.analysis['idle_residency']['time'], 2)
         log.info('Loaded idle_residency into analysis')
 
+    @requires_analysis(['idle_residency'])
     def idle_residency_bar(self, height=600, width=None, title='Idle state residencies', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['idle_residency'], self._load_idle_residency)
 
         fig = px.bar(
             self.ana.analysis['idle_residency'], x='idle_state', y='time', color='wa_path',
@@ -579,12 +606,11 @@ class WorkloadNotebookPlotter:
         )
         log.info('Loaded cpu_idle_miss_counts into analysis')
 
+    @requires_analysis(['cpu_idle_miss_counts'])
     def idle_miss_bar(self, height=600, width=None,
                       title='CPUIdle misses as percentage of all wakeups', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['cpu_idle_miss_counts'], self._load_idle_miss)
 
         ptable(self.ana.analysis['cpu_idle_miss_counts'].groupby(['wa_path', 'type']).sum().reset_index()[
             ['wa_path', 'type', 'count_perc']
@@ -607,24 +633,22 @@ class WorkloadNotebookPlotter:
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded energy_estimate_melt into analysis')
 
+    @requires_analysis(['energy_estimate_melt'])
     def energy_estimate_line(self, height=1000, width=None,
                              title='Mean energy estimate across iterations [bW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['energy_estimate_melt'], self._load_energy_estimate)
 
         self.ana.plot_lines_px(
             self.ana.analysis['energy_estimate_melt'], facet_col='cluster',
             height=height, width=width, title=title
         )
 
+    @requires_analysis(['energy_estimate_melt'])
     def energy_estimate_bar(self, height=600, width=None,
                             title='Gmean energy estimate [bW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['energy_estimate_melt'], self._load_energy_estimate)
 
         self.ana.summary['energy_estimate'] = self.ana.plot_gmean_bars(
             self.ana.analysis['energy_estimate_melt'], x='cluster', y='value', facet_col='metric',
@@ -643,12 +667,11 @@ class WorkloadNotebookPlotter:
         )
         log.info('Loaded sched_pelt_cfs_melt into analysis')
 
+    @requires_analysis(['sched_pelt_cfs_mean'])
     def sched_pelt_cfs_line(self, height=400, width=700,
                             title='Mean cluster', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['sched_pelt_cfs_mean'], self._load_sched_pelt_cfs)
 
         signals = ['util', 'load']
         ds = hv.Dataset(
@@ -668,12 +691,11 @@ class WorkloadNotebookPlotter:
         )
         return layout
 
+    @requires_analysis(['sched_pelt_cfs_mean'])
     def sched_pelt_cfs_bar(self, height=1000, width=None,
                            title='Gmean cfs signals', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['sched_pelt_cfs_melt'], self._load_sched_pelt_cfs)
 
         self.ana.summary['cfs_signals'] = self.ana.plot_gmean_bars(
             self.ana.analysis['sched_pelt_cfs_melt'], x='cluster', y='value',
@@ -725,35 +747,33 @@ class WorkloadNotebookPlotter:
         ]
         log.info('Loaded wakeup_latency_target_cluster into analysis')
 
+    @requires_analysis(['wakeup_latency_mean'])
     def wakeup_latency_line(self, height=600, width=None,
                             title='Task wakeup latencies across iterations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-        self._check_load_analysis(['wakeup_latency_mean'], self._load_wakeup_latency)
 
         self.ana.plot_lines_px(
             self.ana.analysis['wakeup_latency_mean'], facet_col='comm',
             facet_col_wrap=3, height=height, width=width, title=title
         )
 
+    @requires_analysis(['wakeup_latency_mean'])
     def wakeup_latency_bar(self, height=600, width=None,
                            title='Gmean task wakeup latency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_mean'], self._load_wakeup_latency)
 
         self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=3,
             title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height
         )
 
+    @requires_analysis(['wakeup_latency_quantiles'])
     def wakeup_latency_quantiles_bar(self, height=1300, width=None,
                                      title='Gmean latency quantile', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_quantiles'], self._load_wakeup_latency)
 
         self.ana.summary['wakeup_latency_quantiles'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_quantiles'].rename(columns={'wakeup_latency': 'value'}),
@@ -761,12 +781,11 @@ class WorkloadNotebookPlotter:
             width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0
         )
 
+    @requires_analysis(['wakeup_latency_execution_cluster'])
     def wakeup_latency_execution_cluster_bar(self, height=1300, width=None, include_label=True,
                                              title='Mean task wakeup latency per execution cluster'):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_execution_cluster'], self._load_wakeup_latency)
 
         fig = px.bar(
             self.ana.analysis['wakeup_latency_execution_cluster'], x='cluster', y='wakeup_latency', color='wa_path',
@@ -780,12 +799,11 @@ class WorkloadNotebookPlotter:
         ptable(self.ana.analysis['wakeup_latency_execution_cluster'])
         fig.show(renderer='iframe')
 
+    @requires_analysis(['wakeup_latency_target_cluster'])
     def wakeup_latency_target_cluster_bar(self, height=1300, width=None, include_label=True,
                                           title='Mean task wakeup latency per target cluster'):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_target_cluster'], self._load_wakeup_latency)
 
         fig = px.bar(
             self.ana.analysis['wakeup_latency_target_cluster'], x='target_cluster', y='wakeup_latency', color='wa_path',
@@ -824,36 +842,33 @@ class WorkloadNotebookPlotter:
         ].rename(columns={'level_3': 'quantile'}).sort_values(by=['cgroup', 'order'])
         log.info('Loaded wakeup_latency_cgroup_quantiles into analysis')
 
+    @requires_analysis(['wakeup_latency_cgroup_mean'])
     def wakeup_latency_cgroup_line(self, height=600, width=None,
                                    title='cgroup wakeup latencies across iterations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
 
         self.ana.plot_lines_px(
             self.ana.analysis['wakeup_latency_cgroup_mean'], facet_col='cgroup', facet_col_wrap=3,
             height=height, width=width, title=title
         )
 
+    @requires_analysis(['wakeup_latency_cgroup_mean'])
     def wakeup_latency_cgroup_bar(self, height=600, width=None,
                                   title='Gmean task wakeup latency per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
 
         self.ana.summary['wakeup_latency_cgroup'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_mean'], x='metric', y='value', facet_col='cgroup',
             title=title, include_columns=['cgroup'], table_sort=['cgroup'], gmean_round=0, width=width, height=height
         )
 
+    @requires_analysis(['wakeup_latency_cgroup_quantiles'])
     def wakeup_latency_cgroup_quantiles_bar(self, height=1400, width=None,
                                             title='Gmean latency quantile per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['wakeup_latency_cgroup_mean'], self._load_wakeup_latency_cgroup)
 
         self.ana.summary['wakeup_latency_cgroup_quantiles'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_quantiles'], x='quantile', y='value', facet_col='cgroup',
@@ -925,24 +940,22 @@ class WorkloadNotebookPlotter:
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded tasks_residency_cluster_melt into analysis')
 
+    @requires_analysis(['tasks_residency_cpu_total_cluster_melt'])
     def tasks_cpu_residency_cluster_line(self, height=600, width=None,
                                          title='Mean cluster CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['tasks_residency_cpu_total_cluster_melt'], self._load_tasks_cpu_residency)
 
         self.ana.plot_lines_px(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], facet_col='cluster',
             title=title, height=height, width=width, facet_col_wrap=4
         )
 
+    @requires_analysis(['tasks_residency_cpu_total_cluster_melt'])
     def tasks_cpu_residency_cluster_bar(self, height=800, width=None,
                                         title='Gmean cluster CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['tasks_residency_cpu_total_cluster_melt'], self._load_tasks_cpu_residency)
 
         self.ana.summary['tasks_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], x='cluster', y='value', facet_col='metric',
@@ -950,12 +963,11 @@ class WorkloadNotebookPlotter:
             include_total=True
         )
 
+    @requires_analysis(['tasks_residency_total_cluster_melt'])
     def tasks_cpu_residency_per_task_bar(self, height=1200, width=None,
                                          title='Gmean cluster per-task CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['tasks_residency_total_cluster_melt'], self._load_tasks_cpu_residency)
 
         self.ana.summary['tasks_cpu_residency_per_task'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_cluster_melt'], x='cluster', y='value', facet_col='comm',
@@ -964,12 +976,11 @@ class WorkloadNotebookPlotter:
         )
 
     # TODO: CPUs line plot
+    @requires_analysis(['tasks_residency_total_melt'])
     def tasks_cpu_residency_cpu_bar(self, height=1400, width=None,
                                     title='Gmean CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['tasks_residency_total_melt'], self._load_tasks_cpu_residency)
 
         self.ana.summary['tasks_cpu_residency_cpus'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_melt'], x='cpu', y='value', facet_col='comm',
@@ -1001,12 +1012,11 @@ class WorkloadNotebookPlotter:
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded cgroup_residency_total_cluster_melt into analysis')
 
+    @requires_analysis(['cgroup_residency_total_cluster_melt'])
     def cgroup_cpu_residency_cluster_bar(self, height=1100, width=None,
                                          title='Gmean cluster CPU residency per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['cgroup_residency_total_cluster_melt'], self._load_cgroup_cpu_residency)
 
         self.ana.summary['cgroup_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
             self.ana.analysis['cgroup_residency_total_cluster_melt'], x='cluster', y='value', facet_col='cgroup',
@@ -1015,12 +1025,11 @@ class WorkloadNotebookPlotter:
             order_cluster=True, include_total=True
         )
 
+    @requires_analysis(['cgroup_residency_total_melt'])
     def cgroup_cpu_residency_cpu_bar(self, height=1100, width=None,
                                      title='Gmean cgroup CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
-
-        self._check_load_analysis(['cgroup_residency_total_melt'], self._load_cgroup_cpu_residency)
 
         self.ana.summary['cgroup_cpu_residency_cpu'] = self.ana.plot_gmean_bars(
             self.ana.analysis['cgroup_residency_total_melt'], x='cpu', y='value', facet_col='cgroup',
