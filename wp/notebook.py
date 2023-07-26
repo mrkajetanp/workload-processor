@@ -617,14 +617,18 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['pixel6_emeter_mean'])
-    def power_meter_bar(self, height=600, width=None, title='Gmean power usage [mW]', include_label=True):
+    def power_meter_bar(self, height=600, width=None, channels=None,
+                        title='Gmean power usage [mW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
+        data = pl.from_pandas(self.ana.analysis['pixel6_emeter_mean']).rename({'power': 'value'})
+        channels = channels if channels else data['channel'].unique()
+        data = data.filter(pl.col('channel').is_in(channels))
+
         self.ana.summary['power_usage'] = self.ana.plot_gmean_bars(
-            self.ana.analysis['pixel6_emeter_mean'].rename(columns={'power': 'value'}),
-            x='channel', y='value', facet_col='metric', facet_col_wrap=5, title=title,
-            height=height, width=width, include_total=True, include_columns=['channel']
+            data.to_pandas(), x='channel', y='value', facet_col='metric', facet_col_wrap=5,
+            title=title, height=height, width=width, include_total=True, include_columns=['channel']
         )
 
     # -------- Overutilized --------
