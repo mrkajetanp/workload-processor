@@ -276,6 +276,8 @@ class WorkloadNotebookPlotter:
             'adpf': self._load_drarm_adpf,
             'adpf_totals': self._load_drarm_adpf,
             'adpf_totals_melt': self._load_drarm_adpf,
+            'task_activations_stats_cluster': self._load_task_activations_stats,
+            'task_activations_stats_cluster_melt': self._load_task_activations_stats,
         }
         return mapping[analysis]
 
@@ -1311,3 +1313,81 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['cgroup_residency_total_melt'], x='cpu', y='value', facet_col='cgroup',
             facet_col_wrap=1, title='', width=width, height=height, include_columns=['cgroup', 'cpu']
         )
+
+    # -------- Taks placement (activations) --------
+
+    def _load_task_activations_stats(self):
+        # select all tasks specified in the config by default
+
+        self.ana.load_combined_analysis('task_activations_stats_cluster.pqt')
+        self.ana.analysis['task_activations_stats_cluster_melt'] = pd.melt(
+            self.ana.analysis['task_activations_stats_cluster'],
+            id_vars=['kernel', 'wa_path', 'iteration', 'cluster', 'comm'], value_vars=['count', 'duration']
+        )
+
+    @requires_analysis(['task_activations_stats_cluster'])
+    def task_activations_stats_count_line(self, tasks=None, height=500, width=None, include_label=True,
+                                          title='Activation counts of {} per cluster across iterations'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not tasks:
+            tasks = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+        data = self.ana.analysis['task_activations_stats_cluster'].query("comm in @tasks")
+
+        for task, task_df in data.groupby('comm'):
+            self.ana.plot_lines_px(
+                task_df, x='iteration', y='count', color='wa_path', facet_col='cluster',
+                facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
+            )
+
+    @requires_analysis(['task_activations_stats_cluster'])
+    def task_activations_stats_duration_line(self, tasks=None, height=500, width=None, include_label=True,
+                                             title='Activation durations of {} per cluster across iterations'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not tasks:
+            tasks = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+        data = self.ana.analysis['task_activations_stats_cluster'].query("comm in @tasks")
+
+        for task, task_df in data.groupby('comm'):
+            self.ana.plot_lines_px(
+                task_df, x='iteration', y='count', color='wa_path', facet_col='cluster',
+                facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
+            )
+
+    @requires_analysis(['task_activations_stats_cluster_melt'])
+    def task_activations_stats_count_bar(self, tasks=None, height=1000, width=None, include_label=True,
+                                         title='Gmean task activation counts'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not tasks:
+            tasks = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+        data = self.ana.analysis['task_activations_stats_cluster_melt'].query(
+            "comm in @tasks and variable == 'count'"
+        ).reset_index(drop=True)
+
+        self.ana.summary['activations_stats_count'] = self.ana.plot_gmean_bars(
+            data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title,
+            height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
+        )
+
+    @requires_analysis(['task_activations_stats_cluster_melt'])
+    def task_activations_stats_duration_bar(self, tasks=None, height=1000, width=None, include_label=True,
+                                            title='Gmean task activation duration'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        if not tasks:
+            tasks = self.ana.config['processor']['important_tasks'][self.ana.workload_label].get()
+        data = self.ana.analysis['task_activations_stats_cluster_melt'].query(
+            "comm in @tasks and variable == 'duration'"
+        ).reset_index(drop=True)
+
+        self.ana.summary['activations_stats_duration'] = self.ana.plot_gmean_bars(
+            data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title,
+            height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
+        )
+
