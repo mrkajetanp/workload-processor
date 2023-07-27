@@ -278,6 +278,7 @@ class WorkloadNotebookPlotter:
             'adpf_totals_melt': self._load_drarm_adpf,
             'task_activations_stats_cluster': self._load_task_activations_stats,
             'task_activations_stats_cluster_melt': self._load_task_activations_stats,
+            'uclamp_updates': self._load_uclamp_updates,
         }
         return mapping[analysis]
 
@@ -1320,10 +1321,12 @@ class WorkloadNotebookPlotter:
         # select all tasks specified in the config by default
 
         self.ana.load_combined_analysis('task_activations_stats_cluster.pqt')
+        log.info('Loaded task_activations_stats_cluster into analysis')
         self.ana.analysis['task_activations_stats_cluster_melt'] = pd.melt(
             self.ana.analysis['task_activations_stats_cluster'],
             id_vars=['kernel', 'wa_path', 'iteration', 'cluster', 'comm'], value_vars=['count', 'duration']
         )
+        log.info('Loaded task_activations_stats_cluster_melt into analysis')
 
     @requires_analysis(['task_activations_stats_cluster'])
     def task_activations_stats_count_line(self, tasks=None, height=500, width=None, include_label=True,
@@ -1391,3 +1394,30 @@ class WorkloadNotebookPlotter:
             height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
         )
 
+    # -------- Taks placement (activations) --------
+
+    def _load_uclamp_updates(self):
+        def postprocess_uclamp_updates(df):
+            return df.query("task != '<unknown>'")
+
+        self.ana.load_combined_analysis('uclamp_updates.pqt',
+                                        postprocess=postprocess_uclamp_updates, allow_missing=True)
+        log.info('Loaded uclamp_updates into analysis')
+
+    @requires_analysis(['uclamp_updates'])
+    def uclamp_per_task_line(self, tasks=None, height=600, width=1600, include_label=True,
+                             title='Per-task uclamp over time'):
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        ds = hv.Dataset(
+            self.ana.analysis['uclamp_updates'],
+            ['time_it', hv.Dimension('wa_path', values=self.ana.wa_paths), 'iteration', 'uclamp_id', 'task'],
+            ['value']
+        )
+        layout = ds.to(hv.Curve, 'time_it', 'value').overlay('wa_path').opts(shared_axes=False, title=title)
+
+        layout.opts(
+            opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
+        )
+        return layout
