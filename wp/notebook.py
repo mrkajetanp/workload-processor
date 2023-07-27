@@ -24,6 +24,27 @@ from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten, c
 from wp.constants import APP_NAME
 
 
+def setup_notebook():
+    import plotly.io as pio
+    from holoviews import opts
+    from bokeh.themes import built_in_themes
+
+    hv.extension('bokeh')
+    hv.renderer('bokeh').theme = built_in_themes['dark_minimal']
+    hv.renderer('bokeh').webgl = True
+    pio.templates.default = "plotly"
+    pio.templates.default = "plotly_dark"
+
+    color_cycle = hv.Cycle([
+        '#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'
+    ])
+
+    opts.defaults(
+        opts.Curve(tools=['hover'], show_grid=True, color=color_cycle, muted_alpha=0),
+        opts.Table(bgcolor='black')
+    )
+
+
 def trim_number(x):
     if x > 1000000000:
         return f"{round(x / 1000000000, 3)}B"
