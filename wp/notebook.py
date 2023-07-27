@@ -1415,7 +1415,22 @@ class WorkloadNotebookPlotter:
             height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
         )
 
-    # -------- Taks placement (activations) --------
+    def task_activations_detailed(self, wa_path_a, wa_path_b, iteration, comm, columns=1, include_label=True):
+        title = f'{comm} activations in iteration {iteration}'
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        plot_a = self.ana.traces[wa_path_a][iteration].ana.tasks.plot_tasks_activation(
+            self.ana.traces[wa_path_a][iteration].get_task_ids(comm)
+        ).opts(title=f"{title} of {wa_path_a}")
+
+        plot_b = self.ana.traces[wa_path_b][iteration].ana.tasks.plot_tasks_activation(
+            self.ana.traces[wa_path_b][iteration].get_task_ids(comm)
+        ).opts(title=f"{title} of {wa_path_b}")
+
+        return (plot_a + plot_b).cols(columns).opts(shared_axes=False)
+
+    # -------- uclamp updates --------
 
     def _load_uclamp_updates(self):
         def postprocess_uclamp_updates(df):
@@ -1442,3 +1457,4 @@ class WorkloadNotebookPlotter:
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
         return layout
+
