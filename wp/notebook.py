@@ -191,6 +191,10 @@ class WorkloadNotebookAnalysis:
             sort_list.append('order_cluster')
         sort_list.append('order_kernel')
 
+        if percentage and len(self.wa_paths) < 2:
+            log.error("Can't compute percentage differences from less than 2 runs")
+            percentage = False
+
         # prepare percentage differences & pvalues
         if percentage:
             # compute percentage differences
@@ -341,7 +345,7 @@ class WorkloadNotebookPlotter:
         )
         return layout
 
-    def results_bar(self, metrics, height=600, width=None, columns=2,
+    def results_bar(self, metrics, height=600, width=None, columns=2, percentage=True,
                     title='gmean benchmark score', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -351,7 +355,7 @@ class WorkloadNotebookPlotter:
         ).to_pandas()
 
         self.ana.summary['results'] = self.ana.plot_gmean_bars(
-            data, x='stat', y='value', facet_col='metric',
+            data, x='stat', y='value', facet_col='metric', percentage=percentage,
             facet_col_wrap=columns, title=title, width=width, height=height
         )
 
@@ -416,14 +420,14 @@ class WorkloadNotebookPlotter:
         return layout
 
     @requires_analysis(['jb_mean_frame_duration'])
-    def jankbench_mean_frame_durations_bar(self, height=600, width=1000,
+    def jankbench_mean_frame_durations_bar(self, height=600, width=1000, percentage=True,
                                            title='gmean frame durations', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['jb_mean_frame_duration'] = self.ana.plot_gmean_bars(
             self.ana.analysis['jb_mean_frame_duration'], x='variable', y='value',
-            title=title, width=width, height=height
+            title=title, width=width, height=height, percentage=percentage,
         )
 
     @requires_analysis(['jankbench'])
@@ -466,7 +470,7 @@ class WorkloadNotebookPlotter:
         return layout
 
     @requires_analysis(['jankbench_percs'])
-    def jankbench_jank_percentage_bar(self, height=600, width=1000,
+    def jankbench_jank_percentage_bar(self, height=600, width=1000, percentage=True,
                                       title='gmean jank percentage', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -474,7 +478,7 @@ class WorkloadNotebookPlotter:
         self.ana.summary['jankbench_percs'] = self.ana.plot_gmean_bars(
             self.ana.analysis['jankbench_percs'].rename(columns={'perc': 'value'})[
                 ['wa_path', 'iteration', 'value', 'variable']
-            ], x='variable', y='value', title=title, width=width, height=height
+            ], x='variable', y='value', title=title, width=width, height=height, percentage=percentage
         )
 
     def jankbench_metric_line(self, height=600, width=500, columns=3,
@@ -493,7 +497,7 @@ class WorkloadNotebookPlotter:
         )
         return layout
 
-    def jankbench_jank_percentage_metric_bar(self, height=1000, width=None, columns=4,
+    def jankbench_jank_percentage_metric_bar(self, height=1000, width=None, columns=4, percentage=True,
                                              title='gmean jank percentage per-metric', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -501,10 +505,10 @@ class WorkloadNotebookPlotter:
         self.ana.plot_gmean_bars(
             self.ana.results.query("metric == 'jank_p'"),
             x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
-            title=title, width=width, height=height
+            title=title, width=width, height=height, percentage=percentage
         )
 
-    def jankbench_mean_duration_metric_bar(self, height=1000, width=None, columns=4,
+    def jankbench_mean_duration_metric_bar(self, height=1000, width=None, columns=4, percentage=True,
                                            title='gmean frame duration per-metric', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -512,7 +516,7 @@ class WorkloadNotebookPlotter:
         self.ana.plot_gmean_bars(
             self.ana.results.query("metric == 'mean'"),
             x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
-            title=title, width=width, height=height
+            title=title, width=width, height=height, percentage=percentage
         )
 
     # -------- DrArm ADPF --------
@@ -561,7 +565,7 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['adpf_totals_melt'])
-    def drarm_adpf_fps_bar(self, height=600, width=None,
+    def drarm_adpf_fps_bar(self, height=600, width=None, percentage=True,
                            title='Gmean iteration FPS & total frames', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -569,7 +573,7 @@ class WorkloadNotebookPlotter:
         self.ana.summary['drarm_adpf_fps'] = self.ana.plot_gmean_bars(
             self.ana.analysis['adpf_totals_melt'], x='metric', y='value', facet_col='variable',
             facet_col_wrap=5, title=title, height=height, width=width, include_columns=['variable'],
-            table_sort=['variable', 'kernel']
+            table_sort=['variable', 'kernel'], percentage=percentage
         )
 
     @requires_analysis(['adpf_totals_melt'])
@@ -717,7 +721,7 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['pixel6_emeter_mean'])
-    def power_meter_bar(self, height=600, width=None, channels=None,
+    def power_meter_bar(self, height=600, width=None, channels=None, percentage=True,
                         title='Gmean power usage [mW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -727,7 +731,7 @@ class WorkloadNotebookPlotter:
         data = data.filter(pl.col('channel').is_in(channels))
 
         self.ana.summary['power_usage'] = self.ana.plot_gmean_bars(
-            data.to_pandas(), x='channel', y='value', facet_col='metric', facet_col_wrap=5,
+            data.to_pandas(), x='channel', y='value', facet_col='metric', facet_col_wrap=5, percentage=percentage,
             title=title, height=height, width=width, include_total=True, include_columns=['channel']
         )
 
@@ -776,14 +780,16 @@ class WorkloadNotebookPlotter:
                                facet_col_wrap=3, title=title, height=height, width=width)
 
     @requires_analysis(['freqs_mean'])
-    def frequency_bar(self, height=600, width=None, title='Gmean frequency per cluster', include_label=True):
+    def frequency_bar(self, height=600, width=None, include_label=True, percentage=True,
+                      title='Gmean frequency per cluster'):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['frequency'] = self.ana.plot_gmean_bars(
             self.ana.analysis['freqs_mean'], x='metric', y='value', facet_col='cluster', facet_col_wrap=3,
-            title=title, width=width, height=height, order_cluster=True,
-            include_columns=['cluster'])
+            title=title, width=width, height=height, order_cluster=True, percentage=percentage,
+            include_columns=['cluster']
+        )
 
     # -------- Thermal --------
 
@@ -815,14 +821,15 @@ class WorkloadNotebookPlotter:
                                facet_col_wrap=3, title=title)
 
     @requires_analysis(['thermal_melt'])
-    def thermal_bar(self, height=600, width=None, title='Gmean temperature', include_label=True):
+    def thermal_bar(self, height=600, width=None, percentage=True,
+                    title='Gmean temperature', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['thermal'] = self.ana.plot_gmean_bars(
             self.ana.analysis['thermal_melt'], x='cluster', y='value',
             facet_col='metric', facet_col_wrap=2, title=title,
-            width=width, height=height, order_cluster=True, include_columns=['cluster']
+            width=width, height=height, order_cluster=True, include_columns=['cluster'], percentage=percentage
         )
 
     # -------- Perf --------
@@ -848,7 +855,8 @@ class WorkloadNotebookPlotter:
 
         return layout
 
-    def perf_bar(self, counters=None, height=900, width=None, title='Gmean perf counters', include_label=True):
+    def perf_bar(self, counters=None, height=900, width=None, percentage=True,
+                 title='Gmean perf counters', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -857,7 +865,8 @@ class WorkloadNotebookPlotter:
 
         self.ana.plot_gmean_bars(
             self.ana.results_perf.query("metric in @counters")[['kernel', 'wa_path', 'iteration', 'metric', 'value']],
-            x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height
+            x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height,
+            percentage=percentage
         )
 
     # -------- Idle --------
@@ -945,7 +954,7 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['energy_estimate_melt'])
-    def energy_estimate_bar(self, height=600, width=None,
+    def energy_estimate_bar(self, height=600, width=None, percentage=True,
                             title='Gmean energy estimate [bW]', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -953,7 +962,7 @@ class WorkloadNotebookPlotter:
         self.ana.summary['energy_estimate'] = self.ana.plot_gmean_bars(
             self.ana.analysis['energy_estimate_melt'], x='cluster', y='value', facet_col='metric',
             facet_col_wrap=5, title=title, width=width, height=height,
-            include_columns=['cluster'], order_cluster=True, include_total=True
+            include_columns=['cluster'], order_cluster=True, include_total=True, percentage=percentage
         )
 
     # -------- CFS signals --------
@@ -992,15 +1001,15 @@ class WorkloadNotebookPlotter:
         return layout
 
     @requires_analysis(['sched_pelt_cfs_mean'])
-    def sched_pelt_cfs_bar(self, height=1000, width=None,
+    def sched_pelt_cfs_bar(self, height=1000, width=None, percentage=True,
                            title='Gmean cfs signals', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['cfs_signals'] = self.ana.plot_gmean_bars(
             self.ana.analysis['sched_pelt_cfs_melt'], x='cluster', y='value',
-            facet_col='variable', facet_col_wrap=1, title=title,
-            width=width, height=height, order_cluster=True, include_columns=['cluster']
+            facet_col='variable', facet_col_wrap=1, title=title, percentage=percentage,
+            width=width, height=height, order_cluster=True, include_columns=['cluster'],
         )
 
     # -------- Wakeup latency --------
@@ -1059,26 +1068,26 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['wakeup_latency_mean'])
-    def wakeup_latency_bar(self, height=600, width=None, columns=3,
+    def wakeup_latency_bar(self, height=600, width=None, columns=3, percentage=True,
                            title='Gmean task wakeup latency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=columns,
-            title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height
+            title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height, percentage=percentage
         )
 
     @requires_analysis(['wakeup_latency_quantiles'])
-    def wakeup_latency_quantiles_bar(self, height=1300, width=None, columns=1,
+    def wakeup_latency_quantiles_bar(self, height=1300, width=None, columns=1, percentage=True,
                                      title='Gmean latency quantile', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency_quantiles'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_quantiles'].rename(columns={'wakeup_latency': 'value'}),
-            x='quantile', y='value', facet_col='comm', facet_col_wrap=columns, title=title,
-            width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0
+            x='quantile', y='value', facet_col='comm', facet_col_wrap=columns, title=title, percentage=percentage,
+            width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0,
         )
 
     @requires_analysis(['wakeup_latency_execution_cluster'])
@@ -1154,25 +1163,26 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['wakeup_latency_cgroup_mean'])
-    def wakeup_latency_cgroup_bar(self, height=600, width=None,
+    def wakeup_latency_cgroup_bar(self, height=600, width=None, percentage=True,
                                   title='Gmean task wakeup latency per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency_cgroup'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_mean'], x='metric', y='value', facet_col='cgroup',
-            title=title, include_columns=['cgroup'], table_sort=['cgroup'], gmean_round=0, width=width, height=height
+            title=title, include_columns=['cgroup'], table_sort=['cgroup'], gmean_round=0, width=width, height=height,
+            percentage=percentage
         )
 
     @requires_analysis(['wakeup_latency_cgroup_quantiles'])
-    def wakeup_latency_cgroup_quantiles_bar(self, height=1400, width=None,
+    def wakeup_latency_cgroup_quantiles_bar(self, height=1400, width=None, percentage=True,
                                             title='Gmean latency quantile per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['wakeup_latency_cgroup_quantiles'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_quantiles'], x='quantile', y='value', facet_col='cgroup',
-            facet_col_wrap=1, title=title, include_columns=['cgroup', 'quantile'],
+            facet_col_wrap=1, title=title, include_columns=['cgroup', 'quantile'], percentage=percentage,
             table_sort=['quantile', 'cgroup'], width=width, height=height, gmean_round=0
         )
 
@@ -1252,7 +1262,7 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['tasks_residency_cpu_total_cluster_melt'])
-    def tasks_cpu_residency_cluster_bar(self, height=800, width=None, columns=1,
+    def tasks_cpu_residency_cluster_bar(self, height=800, width=None, columns=1, percentage=True,
                                         title='Gmean cluster CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -1260,11 +1270,11 @@ class WorkloadNotebookPlotter:
         self.ana.summary['tasks_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], x='cluster', y='value', facet_col='metric',
             facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height, width=width,
-            order_cluster=True, include_total=True
+            order_cluster=True, include_total=True, percentage=percentage
         )
 
     @requires_analysis(['tasks_residency_total_cluster_melt'])
-    def tasks_cpu_residency_per_task_bar(self, height=1200, width=None, columns=1,
+    def tasks_cpu_residency_per_task_bar(self, height=1200, width=None, columns=1, percentage=True,
                                          title='Gmean cluster per-task CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -1272,19 +1282,19 @@ class WorkloadNotebookPlotter:
         self.ana.summary['tasks_cpu_residency_per_task'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_cluster_melt'], x='cluster', y='value', facet_col='comm',
             facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height,
-            width=width, order_cluster=True, include_total=True
+            width=width, order_cluster=True, include_total=True, percentage=percentage
         )
 
     # TODO: CPUs line plot
     @requires_analysis(['tasks_residency_total_melt'])
-    def tasks_cpu_residency_cpu_bar(self, height=1400, width=None, columns=1,
+    def tasks_cpu_residency_cpu_bar(self, height=1400, width=None, columns=1, percentage=True,
                                     title='Gmean CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['tasks_cpu_residency_cpus'] = self.ana.plot_gmean_bars(
             self.ana.analysis['tasks_residency_total_melt'], x='cpu', y='value', facet_col='comm',
-            facet_col_wrap=columns, title=title, width=width, height=height
+            facet_col_wrap=columns, title=title, width=width, height=height, percentage=percentage
         )
 
     # -------- cgroup CPU residency --------
@@ -1313,7 +1323,7 @@ class WorkloadNotebookPlotter:
         log.info('Loaded cgroup_residency_total_cluster_melt into analysis')
 
     @requires_analysis(['cgroup_residency_total_cluster_melt'])
-    def cgroup_cpu_residency_cluster_bar(self, height=1100, width=None,
+    def cgroup_cpu_residency_cluster_bar(self, height=1100, width=None, percentage=True,
                                          title='Gmean cluster CPU residency per-cgroup', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -1322,18 +1332,19 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['cgroup_residency_total_cluster_melt'], x='cluster', y='value', facet_col='cgroup',
             facet_col_wrap=1, title=title, width=width, height=height,
             include_columns=['cgroup', 'cluster'], table_sort=['cgroup', 'cluster'],
-            order_cluster=True, include_total=True
+            order_cluster=True, include_total=True, percentage=percentage
         )
 
     @requires_analysis(['cgroup_residency_total_melt'])
-    def cgroup_cpu_residency_cpu_bar(self, height=1100, width=None,
+    def cgroup_cpu_residency_cpu_bar(self, height=1100, width=None, percentage=True,
                                      title='Gmean cgroup CPU residency', include_label=True):
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['cgroup_cpu_residency_cpu'] = self.ana.plot_gmean_bars(
             self.ana.analysis['cgroup_residency_total_melt'], x='cpu', y='value', facet_col='cgroup',
-            facet_col_wrap=1, title='', width=width, height=height, include_columns=['cgroup', 'cpu']
+            facet_col_wrap=1, title='', width=width, height=height, include_columns=['cgroup', 'cpu'],
+            percentage=percentage
         )
 
     # -------- Taks placement (activations) --------
@@ -1394,8 +1405,8 @@ class WorkloadNotebookPlotter:
         ).reset_index(drop=True)
 
         self.ana.summary['activations_stats_count'] = self.ana.plot_gmean_bars(
-            data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title,
-            height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
+            data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title, percentage=False,
+            height=height, width=width, include_columns=['cluster'], order_cluster=True,
         )
 
     @requires_analysis(['task_activations_stats_cluster_melt'])
