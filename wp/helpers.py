@@ -7,6 +7,14 @@ from lisa.trace import Trace, MockTraceParser
 from lisa.datautils import series_mean, df_update_duplicates
 
 
+class WorkloadProcessingError(Exception):
+    pass
+
+
+class WPMetricFailedError(Exception):
+    pass
+
+
 def load_yaml(path):
     with open(path, "r") as ymlfile:
         return yaml.load(ymlfile, Loader=yaml.CLoader)
@@ -117,3 +125,11 @@ def flatten(t):
 
 def trim_task_comm(task):
     return task[1:-1].split(':')[1]
+
+
+def try_get_task_ids(trace, task):
+    try:
+        return trace.get_task_ids(task)
+    except KeyError:
+        log.warning(f'Task "{task}" not found in {trace.trace_path}')
+        return None

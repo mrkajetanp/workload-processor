@@ -6,7 +6,8 @@ import lisa
 from lisa.trace import TaskID
 
 from wp.constants import APP_NAME
-from wp.helpers import df_add_cluster, flatten, trim_task_comm, df_add_wa_output_tags
+from wp.helpers import df_add_cluster, flatten, trim_task_comm, df_add_wa_output_tags, try_get_task_ids
+from wp.helpers import WorkloadProcessingError, WPMetricFailedError
 
 
 class WorkloadAnalysisRunner:
@@ -21,6 +22,9 @@ class WorkloadAnalysisRunner:
             log.debug(f'Processing iteration {iteration} from {trace.trace_path} with {trace_to_df.__name__}')
             try:
                 return trace_to_df(trace).with_columns(pl.lit(iteration).alias('iteration'))
+            except WorkloadProcessingError as e:
+                log.error(e)
+                return None
             except Exception as e:
                 log.error(f'Processing iteration {iteration} failed with {e}')
                 if self.processor.allow_missing:
@@ -29,7 +33,10 @@ class WorkloadAnalysisRunner:
 
         log.debug(f'Applying analysis {trace_to_df.__name__}')
         dfs = [analyse_iteration(trace, iteration) for iteration, trace in self.processor.traces.items()]
-        analysis_df = pl.concat([df for df in dfs if df is not None])
+        try:
+            analysis_df = pl.concat([df for df in dfs if df is not None])
+        except ValueError:
+            raise WPMetricFailedError(f'All {trace_to_df.__name__} outputs were empty')
         return df_add_wa_output_tags(analysis_df, self.processor.wa_output)
 
     def trace_cpu_idle_df(self, trace):
@@ -109,10 +116,14 @@ class WorkloadAnalysisRunner:
                           **{str(float(i)): "cpu"+str(i) for i in range(cpu_count)}})
 
     def trace_task_wakeup_latency_df(self, trace):
-        tasks = [
-            trace.get_task_ids(task)
-            for task in self.config['processor']['important_tasks'][self.processor.label].get()
-        ]
+        config_tasks = self.config['processor']['important_tasks'][self.processor.label].get()
+        tasks = [task for task in [
+            try_get_task_ids(trace, task)
+            for task in config_tasks
+        ] if task is not None]
+
+        if not tasks:
+            raise WorkloadProcessingError(f"None of {config_tasks} were found in {trace.trace_path}")
 
         def task_latency(pid, comm):
             try:
@@ -126,10 +137,14 @@ class WorkloadAnalysisRunner:
         return pl.concat([task_latency(pid, comm) for pid, comm in flatten(tasks)])
 
     def trace_task_activations_df(self, trace):
-        tasks = [
-            trace.get_task_ids(task)
-            for task in self.config['processor']['important_tasks'][self.processor.label].get()
-        ]
+        config_tasks = self.config['processor']['important_tasks'][self.processor.label].get()
+        tasks = [task for task in [
+            try_get_task_ids(trace, task)
+            for task in config_tasks
+        ] if task is not None]
+
+        if not tasks:
+            raise WorkloadProcessingError(f"None of {config_tasks} were found in {trace.trace_path}")
 
         return pl.concat([
             pl.from_pandas(trace.ana.tasks.df_task_activation((pid, comm))).with_columns(

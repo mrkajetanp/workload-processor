@@ -15,7 +15,7 @@ from wp.analysis import WorkloadAnalysisRunner
 from wp.constants import APP_NAME, SUPPORTED_WORKLOADS
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
-from wp.helpers import cpu_cluster
+from wp.helpers import cpu_cluster, WPMetricFailedError
 
 
 class WorkloadProcessor:
@@ -97,7 +97,7 @@ class WorkloadProcessor:
                 analysis_start = time.time()
                 METRIC_TO_ANALYSIS[metric]()
                 log.debug(f"{metric} analysis complete, took {round(time.time() - analysis_start, 2)}s")
-            except (MissingTraceEventError, HostError) as e:
+            except (MissingTraceEventError, HostError, WPMetricFailedError) as e:
                 log.error(e)
 
     # Parse and initialise the traces
