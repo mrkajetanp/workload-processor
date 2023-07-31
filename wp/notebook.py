@@ -112,6 +112,8 @@ class WorkloadNotebookAnalysis:
 
         self.analysis = dict()
         self.summary = dict()
+        self.px_figures = dict()
+        self.hv_figures = dict()
 
         self.CPUS = [str(float(x)) for x in flatten(self.config['target']['clusters'].get().values())]
         self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
@@ -253,6 +255,7 @@ class WorkloadNotebookAnalysis:
         fig.update_yaxes(matches=None)
         if sort_ascending:
             fig.update_xaxes(categoryorder='total ascending')
+        self.px_figures[self._title_to_filename(title, "__bar")] = fig
         fig.show(renderer='iframe')
 
         return data_table
@@ -263,7 +266,27 @@ class WorkloadNotebookAnalysis:
                       height=height, width=width, title=title)
         if not scale_y:
             fig.update_yaxes(matches=None)
+        self.px_figures[self._title_to_filename(title, "__line")] = fig
         fig.show(renderer=renderer)
+
+    def _title_to_filename(self, title, suffix):
+        return "".join([lt for lt in title.lower() if lt.isalnum() or lt == ' ']).replace(' ', '_').replace(
+            '__', '_'
+        ) + '__' + "__".join(self.wa_paths) + suffix
+
+    def save_image_plots(self, directory, extension='png', width=1800):
+        for name, fig in self.px_figures.items():
+            filename = f"{directory}/{name}.{extension}"
+            self.px_figures[name].write_image(filename, width=width)
+            log.debug(f'Successfully saved px figure {filename}')
+        log.debug('All px image plots saved successfully')
+
+        for name, fig in self.hv_figures.items():
+            filename = f"{directory}/{name}.{extension}"
+            hv.save(self.hv_figures[name], filename, fmt=extension)
+            log.debug(f'Successfully saved hv figure {filename}')
+        log.debug('All hv image plots saved successfully')
+        log.info('All image plots saved successfully')
 
 
 class WorkloadNotebookPlotter:
@@ -343,6 +366,8 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width),
         )
+
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
     def results_bar(self, metrics, height=600, width=None, columns=2, percentage=True,
