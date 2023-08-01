@@ -909,6 +909,8 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
+        self.ana.summary['idle_resdiency'] = self.ana.analysis['idle_residency']
+        ptable(self.ana.analysis['idle_residency'].rename(columns={'wa_path': 'kernel'}))
         fig = px.bar(
             self.ana.analysis['idle_residency'], x='idle_state', y='time', color='wa_path',
             facet_col='cluster', barmode='group', text=self.ana.analysis['idle_residency']['time'],
@@ -946,9 +948,11 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        ptable(self.ana.analysis['cpu_idle_miss_counts'].groupby(['wa_path', 'type']).sum().reset_index()[
-            ['wa_path', 'type', 'count_perc']
-        ])
+        self.ana.summary['idle_miss'] = self.ana.analysis['cpu_idle_miss_counts'].groupby(
+            ['wa_path', 'type']
+        ).sum().reset_index()[['wa_path', 'type', 'count_perc']]
+
+        ptable(self.ana.summary['idle_miss'].rename(columns={'wa_path': 'kernel'}))
         fig = px.bar(
             self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='wa_path',
             facet_col='cluster', barmode='group', text=self.ana.analysis['cpu_idle_miss_counts']['count_perc'],
