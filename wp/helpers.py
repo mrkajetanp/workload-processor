@@ -44,10 +44,13 @@ def df_iterations_mean(df, other_cols=None):
     )
 
 
-def df_add_wa_output_tags(df, out):
-    log.debug(f'Adding WA output tags to {out.path}')
-    kernel = out._jobs[os.path.basename(out.path)][0].target_info.kernel_version.release
-    wa_path = os.path.basename(out.path)
+def df_add_wa_output_tags(df, wa_output):
+    log.debug(f'Adding WA output tags to {wa_output.path}')
+    try:
+        kernel = list(wa_output._jobs.values())[0][0].target_info.kernel_version.release
+    except Exception:
+        kernel = '<unknown>'
+    wa_path = os.path.basename(wa_output.path)
     return df.with_columns(pl.lit(kernel).alias('kernel'), pl.lit(wa_path).alias('wa_path'))
 
 
