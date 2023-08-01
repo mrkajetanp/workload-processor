@@ -13,9 +13,9 @@ from devlib.exception import HostError
 
 from wp.analysis import WorkloadAnalysisRunner
 from wp.constants import APP_NAME, SUPPORTED_WORKLOADS
-from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces
+from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, cpu_cluster
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
-from wp.helpers import cpu_cluster, WPMetricFailedError
+from wp.exception import WPMetricFailedError, WorkloadProcessorError
 
 
 class WorkloadProcessor:
@@ -29,7 +29,10 @@ class WorkloadProcessor:
 
         if not os.path.exists(output_path):
             raise FileNotFoundError(f"WA output path '{output_path}' not found.")
+
         self.wa_output = WAOutput(output_path)
+        if not self.wa_output._jobs:
+            raise WorkloadProcessorError(f"WA output '{output_path}' contains no jobs")
 
         # create a directory for the analysis
         self.analysis_path = os.path.join(self.wa_output.path, 'analysis')

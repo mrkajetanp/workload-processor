@@ -7,7 +7,7 @@ from lisa.trace import TaskID
 
 from wp.constants import APP_NAME
 from wp.helpers import df_add_cluster, flatten, trim_task_comm, df_add_wa_output_tags, try_get_task_ids
-from wp.helpers import WorkloadProcessingError, WPMetricFailedError
+from wp.exception import WorkloadProcessingError, WPMetricFailedError
 
 
 class WorkloadAnalysisRunner:

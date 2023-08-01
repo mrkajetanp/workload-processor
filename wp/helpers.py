@@ -7,14 +7,6 @@ from lisa.trace import Trace, MockTraceParser
 from lisa.datautils import series_mean, df_update_duplicates
 
 
-class WorkloadProcessingError(Exception):
-    pass
-
-
-class WPMetricFailedError(Exception):
-    pass
-
-
 def load_yaml(path):
     with open(path, "r") as ymlfile:
         return yaml.load(ymlfile, Loader=yaml.CLoader)
