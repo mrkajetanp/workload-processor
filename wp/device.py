@@ -99,10 +99,11 @@ class WorkloadDevice:
     def reload_module(self):
         log.info('Reloading the Lisa module')
         self.device.shell("rmmod lisa")
-        modules_path = os.path.join(
-            self.config['target']['modules_path'].get(),
-            self.device.shell('uname -r').strip()
-        )
+        modules_base_path = self.config['target']['modules_path'].get()
+        modules_dir_count = int(self.device.shell(f"ls {modules_base_path} | wc -l").strip())
+        modules_dir_version_cmd = f"ls {modules_base_path} | head -1" if modules_dir_count == 1 else 'uname -r'
+        modules_dir_version = self.device.shell(modules_dir_version_cmd).strip()
+        modules_path = os.path.join(modules_base_path, modules_dir_version)
         self.device.shell(f"modprobe -d {modules_path} lisa")
 
     def disable_cpusets(self):
