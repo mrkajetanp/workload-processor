@@ -234,7 +234,7 @@ class WorkloadNotebookAnalysis:
                            if col in ([
                                'wa_path', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'
                            ] + include_columns)]
-        data_table = gmeans_mean[data_table_cols].rename(columns={'wa_path': 'kernel'})
+        data_table = gmeans_mean[data_table_cols].rename(columns={'wa_path': 'tag'})
         if percentage:
             data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
         data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
@@ -779,7 +779,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        ptable(self.ana.analysis['overutilized_mean'])
+        ptable(self.ana.analysis['overutilized_mean'].rename(columns={'wa_path': 'tag'}))
         self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
 
@@ -910,7 +910,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['idle_resdiency'] = self.ana.analysis['idle_residency']
-        ptable(self.ana.analysis['idle_residency'].rename(columns={'wa_path': 'kernel'}))
+        ptable(self.ana.analysis['idle_residency'].rename(columns={'wa_path': 'tag'}))
         fig = px.bar(
             self.ana.analysis['idle_residency'], x='idle_state', y='time', color='wa_path',
             facet_col='cluster', barmode='group', text=self.ana.analysis['idle_residency']['time'],
@@ -952,7 +952,7 @@ class WorkloadNotebookPlotter:
             ['wa_path', 'type']
         ).sum().reset_index()[['wa_path', 'type', 'count_perc']]
 
-        ptable(self.ana.summary['idle_miss'].rename(columns={'wa_path': 'kernel'}))
+        ptable(self.ana.summary['idle_miss'].rename(columns={'wa_path': 'tag'}))
         fig = px.bar(
             self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='wa_path',
             facet_col='cluster', barmode='group', text=self.ana.analysis['cpu_idle_miss_counts']['count_perc'],
