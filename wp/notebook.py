@@ -620,7 +620,7 @@ class WorkloadNotebookPlotter:
 
     # -------- TLDR --------
 
-    def summary(self):
+    def summary(self, rename_cols={}):
         parts = []
 
         # --- Results ---
@@ -711,7 +711,7 @@ class WorkloadNotebookPlotter:
             task_cpu_res['metric'] = "CPU residency (" + task_cpu_res['metric'] + ")"
             parts.append(task_cpu_res)
 
-        summary = pd.concat(parts).reset_index(drop=True)
+        summary = pd.concat(parts).reset_index(drop=True).rename(columns=rename_cols)
 
         print(self.ana.label)
         ptable(summary)
