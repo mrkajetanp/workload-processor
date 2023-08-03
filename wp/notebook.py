@@ -88,7 +88,7 @@ class WorkloadNotebookAnalysis:
             output._jobs[os.path.basename(output.path)][0].target_info.kernel_version.release
             for output in self.wa_outputs
         ]
-        self.wa_paths = [
+        self.tags = [
             trim_wa_path(os.path.basename(output.path))
             for output in self.wa_outputs
         ]
@@ -97,7 +97,7 @@ class WorkloadNotebookAnalysis:
         if not self.results.empty:
             if 'scaled from(%)' in self.results.columns:
                 self.results = self.results.drop(columns=['scaled from(%)'])
-            self.results['wa_path'] = self.results['wa_path'].map(trim_wa_path)
+            self.results['tag'] = self.results['wa_path'].map(trim_wa_path)
 
             # separate perf results from benchmark results
             self.results_perf = self.results[
@@ -145,16 +145,14 @@ class WorkloadNotebookAnalysis:
     def show(self):
         display(self.results)
         print('benchmark_dirs:', self.benchmark_dirs)
-        print('wa_paths:', self.wa_paths)
+        print('tags:', self.tags)
         print('kernels:', self.kernels)
 
     @property
     def config(self):
         return confuse.Configuration(APP_NAME, __name__)
 
-    def load_combined_analysis(self, name, trim_path=True, preprocess=lambda d: d,
-                               postprocess=None, allow_missing=False):
-
+    def load_combined_analysis(self, name, preprocess=lambda d: d, postprocess=None, allow_missing=False):
         def load_parquet(benchmark):
             try:
                 return preprocess(pd.read_parquet(os.path.join(self.benchmark_path, benchmark, 'analysis', name)))
@@ -166,8 +164,7 @@ class WorkloadNotebookAnalysis:
 
         dfs = [load_parquet(benchmark) for benchmark in self.benchmark_dirs]
         result = pd.concat(dfs)
-        if trim_path:
-            result['wa_path'] = result['wa_path'].map(trim_wa_path)
+        result['tag'] = result['wa_path'].map(trim_wa_path)
         if postprocess is not None:
             result = postprocess(result)
         self.analysis[name.split('.')[0]] = result
@@ -193,22 +190,22 @@ class WorkloadNotebookAnalysis:
             sort_list.append('order_cluster')
         sort_list.append('order_kernel')
 
-        if percentage and len(self.wa_paths) < 2:
+        if percentage and len(self.tags) < 2:
             log.error("Can't compute percentage differences from less than 2 runs")
             percentage = False
 
         # prepare percentage differences & pvalues
         if percentage:
             # compute percentage differences
-            stats_perc = Stats(df, ref_group={'wa_path': self.wa_paths[0]}, value_col=y,
+            stats_perc = Stats(df, ref_group={'tag': self.tags[0]}, value_col=y,
                                agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
-            # re-add stub a_wa_path
-            stats_perc_vals_temp = stats_perc.query(f"wa_path == '{self.wa_paths[1]}'")
-            stats_perc_vals_temp['wa_path'] = self.wa_paths[0]
+            # re-add stub tag
+            stats_perc_vals_temp = stats_perc.query(f"tag == '{self.tags[1]}'")
+            stats_perc_vals_temp['tag'] = self.tags[0]
             stats_perc_vals_temp['value'] = 0
             # re-combine a df with percentage differences
             stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
-            stats_perc_vals['order_kernel'] = stats_perc_vals['wa_path'].map(lambda x: self.wa_paths.index(x))
+            stats_perc_vals['order_kernel'] = stats_perc_vals['tag'].map(lambda x: self.tags.index(x))
 
             if order_cluster:
                 stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
@@ -222,7 +219,7 @@ class WorkloadNotebookAnalysis:
         gmeans = Stats(df, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}).df
         if gmean_round > 0:
             gmeans['value'] = round(gmeans['value'], gmean_round)
-        gmeans['order_kernel'] = gmeans['wa_path'].map(lambda x: self.wa_paths.index(x))
+        gmeans['order_kernel'] = gmeans['tag'].map(lambda x: self.tags.index(x))
 
         if order_cluster:
             gmeans['order_cluster'] = gmeans['cluster'].map(lambda x: shown_clusters.index(x))
@@ -230,11 +227,10 @@ class WorkloadNotebookAnalysis:
         gmeans_mean = gmeans.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
 
         # prepare the data table
-        data_table_cols = [col for col in gmeans_mean.columns
-                           if col in ([
-                               'wa_path', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'
-                           ] + include_columns)]
-        data_table = gmeans_mean[data_table_cols].rename(columns={'wa_path': 'tag'})
+        data_table = gmeans_mean[[
+            col for col in gmeans_mean.columns
+            if col in (['tag', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'] + include_columns)
+        ]]
         if percentage:
             data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
         data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
@@ -248,7 +244,7 @@ class WorkloadNotebookAnalysis:
         ) if percentage else gmeans_mean['value']
 
         # plot bars
-        fig = px.bar(gmeans_mean, x=x, y=y, color='wa_path', facet_col=facet_col, facet_col_wrap=facet_col_wrap,
+        fig = px.bar(gmeans_mean, x=x, y=y, color='tag', facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                      barmode='group', title=title, width=width, height=height,
                      text=plot_text)
         fig.update_traces(textposition='outside')
@@ -260,7 +256,7 @@ class WorkloadNotebookAnalysis:
 
         return data_table
 
-    def plot_lines_px(self, df, x='iteration', y='value', color='wa_path', facet_col=None, facet_col_wrap=2,
+    def plot_lines_px(self, df, x='iteration', y='value', color='tag', facet_col=None, facet_col_wrap=2,
                       height=600, width=None, title=None, scale_y=False, renderer='iframe'):
         fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                       height=height, width=width, title=title)
@@ -272,7 +268,7 @@ class WorkloadNotebookAnalysis:
     def _title_to_filename(self, title, suffix):
         return "".join([lt for lt in title.lower() if lt.isalnum() or lt == ' ']).replace(' ', '_').replace(
             '__', '_'
-        ) + '__' + "__".join(self.wa_paths) + suffix
+        ) + '__' + "__".join(self.tags) + suffix
 
     def save_image_plots(self, directory, extension='png', width=1800):
         for name, fig in self.px_figures.items():
@@ -357,10 +353,10 @@ class WorkloadNotebookPlotter:
 
         ds = hv.Dataset(
             self.ana.results,
-            ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths),
+            ['iteration', hv.Dimension('tag', values=self.ana.tags),
              hv.Dimension('metric', values=metrics)], 'value'
         )
-        layout = ds.select(metric=metrics).to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+        layout = ds.select(metric=metrics).to(hv.Curve, 'iteration', 'value').overlay('tag').opts(
             legend_position='bottom'
         ).layout('metric').opts(shared_axes=False, title=title).cols(columns)
         layout.opts(
@@ -388,29 +384,29 @@ class WorkloadNotebookPlotter:
 
     def _load_jankbench(self):
         self.ana.analysis['jankbench'] = pd.concat([wa_output['jankbench'].df for wa_output in self.ana.wa_outputs])
-        self.ana.analysis['jankbench']['wa_path'] = self.ana.analysis['jankbench']['wa_path'].map(trim_wa_path)
+        self.ana.analysis['jankbench']['tag'] = self.ana.analysis['jankbench']['wa_path'].map(trim_wa_path)
         log.info('Loaded jankbench into analysis')
 
         self.ana.analysis['jb_max_frame_duration'] = self.ana.analysis['jankbench'].query(
             "variable == 'total_duration'"
-        )[["wa_path", "iteration", "value"]].groupby(["wa_path"]).max().reset_index()
+        )[["tag", "iteration", "value"]].groupby(["tag"]).max().reset_index()
         self.ana.analysis['jb_max_frame_duration']['variable'] = 'max_frame_duration'
         log.info('Loaded jb_max_frame_duration into analysis')
 
         self.ana.analysis['jb_mean_frame_duration'] = self.ana.analysis['jankbench'].query(
             "variable == 'total_duration'"
-        )[["wa_path", "iteration", "value"]].groupby(
-            ["wa_path", "iteration"]
+        )[["tag", "iteration", "value"]].groupby(
+            ["tag", "iteration"]
         ).agg(lambda x: series_mean(x)).reset_index()
         self.ana.analysis['jb_mean_frame_duration']['variable'] = 'mean_frame_duration'
         log.info('Loaded jb_mean_frame_duration into analysis')
 
         self.ana.analysis['jankbench_percs'] = self.ana.analysis['jankbench'].query("variable == 'jank_frame'").groupby(
-            ['wa_path', 'iteration']
+            ['tag', 'iteration']
         ).size().reset_index().rename(columns={0: 'count'})
         self.ana.analysis['jankbench_percs']['jank_count'] = self.ana.analysis['jankbench'].query(
             "variable == 'jank_frame' and value == 1.0"
-        ).groupby(['wa_path', 'iteration']).size().reset_index().rename(columns={0: 'count'})['count']
+        ).groupby(['tag', 'iteration']).size().reset_index().rename(columns={0: 'count'})['count']
         self.ana.analysis['jankbench_percs']['perc'] = round(
             self.ana.analysis['jankbench_percs']['jank_count'] / self.ana.analysis['jankbench_percs']['count'] * 100, 2
         )
@@ -435,10 +431,10 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         ds = hv.Dataset(self.ana.analysis['jb_mean_frame_duration'], [
-            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths)
+            'iteration', hv.Dimension('tag', values=self.ana.tags)
         ], 'value')
         layout = ds.to(hv.Curve, 'iteration',
-                       'value').overlay('wa_path').opts(legend_position='bottom').opts(shared_axes=False, title=title)
+                       'value').overlay('tag').opts(legend_position='bottom').opts(shared_axes=False, title=title)
         layout.opts(
             opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
         )
@@ -463,7 +459,7 @@ class WorkloadNotebookPlotter:
 
         fig = px.histogram(
             self.ana.analysis['jankbench'].query("variable == 'total_duration'"), x='value',
-            color='wa_path', barmode='group', nbins=40, height=height, width=width, title=title
+            color='tag', barmode='group', nbins=40, height=height, width=width, title=title
         )
         fig.show(renderer='iframe')
 
@@ -475,7 +471,7 @@ class WorkloadNotebookPlotter:
 
         fig = px.ecdf(
             self.ana.analysis['jankbench'].query("variable == 'total_duration'"),
-            x='value', color='wa_path', height=height, width=width, title=title
+            x='value', color='tag', height=height, width=width, title=title
         )
         fig.show(renderer='iframe')
 
@@ -486,9 +482,9 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         ds = hv.Dataset(self.ana.analysis['jankbench_percs'],
-                        ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths)], 'perc')
+                        ['iteration', hv.Dimension('tag', values=self.ana.tags)], 'perc')
         layout = ds.to(hv.Curve, 'iteration',
-                       'perc').overlay('wa_path').opts(legend_position='bottom').opts(shared_axes=False, title=title)
+                       'perc').overlay('tag').opts(legend_position='bottom').opts(shared_axes=False, title=title)
         layout.opts(
             opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
         )
@@ -502,7 +498,7 @@ class WorkloadNotebookPlotter:
 
         self.ana.summary['jankbench_percs'] = self.ana.plot_gmean_bars(
             self.ana.analysis['jankbench_percs'].rename(columns={'perc': 'value'})[
-                ['wa_path', 'iteration', 'value', 'variable']
+                ['tag', 'iteration', 'value', 'variable']
             ], x='variable', y='value', title=title, width=width, height=height, percentage=percentage
         )
 
@@ -512,9 +508,9 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         ds = hv.Dataset(self.ana.results, [
-            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths), 'test_name', 'metric'
+            'iteration', hv.Dimension('tag', values=self.ana.tags), 'test_name', 'metric'
         ], 'value')
-        layout = ds.to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+        layout = ds.to(hv.Curve, 'iteration', 'value').overlay('tag').opts(
             legend_position='bottom'
         ).layout('test_name').opts(shared_axes=False, title=title).cols(columns)
         layout.opts(
@@ -555,12 +551,12 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('adpf_totals.pqt')
         log.info('Loaded adpf_totals into analysis')
         self.ana.analysis['adpf_totals_melt'] = pd.melt(
-            self.ana.analysis['adpf_totals'], id_vars=['iteration', 'wa_path'],
+            self.ana.analysis['adpf_totals'], id_vars=['iteration', 'tag'],
             value_vars=['average fps', 'frame count']
         )
 
         self.ana.ds_adpf = hv.Dataset(
-            self.ana.analysis['adpf'].reset_index(), ['ts', hv.Dimension('wa_path', values=self.ana.wa_paths)], [
+            self.ana.analysis['adpf'].reset_index(), ['ts', hv.Dimension('tag', values=self.ana.tags)], [
                 'average fps', 'sigma fps', 'thermal status',
                 'Adaptive Batching', 'sn_Adaptive Batching', 'Adaptive Decals',
                 'sn_Adaptive Decals', 'Adaptive Framerate', 'sn_Adaptive Framerate',
@@ -598,7 +594,7 @@ class WorkloadNotebookPlotter:
         self.ana.summary['drarm_adpf_fps'] = self.ana.plot_gmean_bars(
             self.ana.analysis['adpf_totals_melt'], x='metric', y='value', facet_col='variable',
             facet_col_wrap=5, title=title, height=height, width=width, include_columns=['variable'],
-            table_sort=['variable', 'kernel'], percentage=percentage
+            table_sort=['variable', 'tag'], percentage=percentage
         )
 
     @requires_analysis(['adpf_totals_melt'])
@@ -607,7 +603,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         layout = hv.Layout([
-            self.ana.ds_adpf.to(hv.Curve, 'ts', metrics[0]).overlay('wa_path').opts(
+            self.ana.ds_adpf.to(hv.Curve, 'ts', metrics[0]).overlay('tag').opts(
                 legend_position='bottom'
             ).opts(shared_axes=False, title=f"{title} {metric}")
             for metric in metrics
@@ -629,8 +625,8 @@ class WorkloadNotebookPlotter:
             scores = self.ana.summary['results'].copy()
             scores['perc_diff'] = scores['perc_diff'].apply(lambda s: f"({s})")
             scores['value'] = scores['value'] + " " + scores['perc_diff']
-            scores = scores.pivot(values='value', columns='kernel', index='metric').reset_index()[
-                ['metric'] + self.ana.wa_paths
+            scores = scores.pivot(values='value', columns='tag', index='metric').reset_index()[
+                ['metric'] + self.ana.tags
             ]
             parts.append(scores)
 
@@ -641,8 +637,8 @@ class WorkloadNotebookPlotter:
             mean_durations['perc_diff'] = mean_durations['perc_diff'].apply(lambda s: f"({s})")
             mean_durations['value'] = mean_durations['value'] + " " + mean_durations['perc_diff']
             mean_durations = mean_durations.pivot(
-                values='value', columns='kernel', index='variable'
-            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+                values='value', columns='tag', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.tags]
             parts.append(mean_durations)
 
         if 'jankbench_percs' in self.ana.summary:
@@ -650,15 +646,15 @@ class WorkloadNotebookPlotter:
             jankbench_percs['perc_diff'] = jankbench_percs['perc_diff'].apply(lambda s: f"({s})")
             jankbench_percs['value'] = jankbench_percs['value'] + " " + jankbench_percs['perc_diff']
             jankbench_percs = jankbench_percs.pivot(
-                values='value', columns='kernel', index='variable'
-            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+                values='value', columns='tag', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.tags]
             parts.append(jankbench_percs)
 
         if 'jb_max_frame_duration' in self.ana.summary:
             summary_max_durations = self.ana.summary['jb_max_frame_duration'].copy()
             summary_max_durations = summary_max_durations.pivot(
-                values='value', columns='kernel', index='variable'
-            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.wa_paths]
+                values='value', columns='tag', index='variable'
+            ).reset_index().rename(columns={'variable': 'metric'})[['metric'] + self.ana.tags]
             parts.append(summary_max_durations)
 
         # --- Trace metrics ---
@@ -668,16 +664,16 @@ class WorkloadNotebookPlotter:
             power_usage['perc_diff'] = power_usage['perc_diff'].apply(lambda s: f"({s})")
             power_usage['value'] = power_usage['value'] + " " + power_usage['perc_diff']
             power_usage['channel'] = 'CPU_total_power'
-            power_usage = power_usage.pivot(values='value', columns='kernel', index='channel').reset_index().rename(
+            power_usage = power_usage.pivot(values='value', columns='tag', index='channel').reset_index().rename(
                 columns={'channel': 'metric'}
-            )[['metric'] + self.ana.wa_paths]
+            )[['metric'] + self.ana.tags]
             parts.append(power_usage)
 
         if 'overutilized_mean' in self.ana.analysis:
             ou = self.ana.analysis['overutilized_mean'].copy()
             ou['percentage'] = ou['percentage'].apply(lambda x: f"{x}%")
-            ou = ou.pivot(values='percentage', columns='wa_path', index='metric').reset_index()[
-                ['metric'] + self.ana.wa_paths
+            ou = ou.pivot(values='percentage', columns='tag', index='metric').reset_index()[
+                ['metric'] + self.ana.tags
             ]
             parts.append(ou)
 
@@ -685,9 +681,9 @@ class WorkloadNotebookPlotter:
             thermal = self.ana.summary['thermal'].copy()
             thermal['perc_diff'] = thermal['perc_diff'].apply(lambda s: f"({s})")
             thermal['value'] = thermal['value'] + " " + thermal['perc_diff']
-            thermal = thermal.pivot(values='value', columns='kernel', index='cluster').reset_index().rename(
+            thermal = thermal.pivot(values='value', columns='tag', index='cluster').reset_index().rename(
                 columns={'cluster': 'metric'}
-            )[['metric'] + self.ana.wa_paths]
+            )[['metric'] + self.ana.tags]
             thermal['metric'] = "thermal (" + thermal['metric'] + ")"
             parts.append(thermal)
 
@@ -696,18 +692,18 @@ class WorkloadNotebookPlotter:
             wakeup_latency['perc_diff'] = wakeup_latency['perc_diff'].apply(lambda s: f"({s})")
             wakeup_latency['comm'] = "latency (" + wakeup_latency['comm'] + ")"
             wakeup_latency['value'] = wakeup_latency['value'] + " " + wakeup_latency['perc_diff']
-            wakeup_latency = wakeup_latency.pivot(values='value', columns='kernel', index='comm').reset_index().rename(
+            wakeup_latency = wakeup_latency.pivot(values='value', columns='tag', index='comm').reset_index().rename(
                 columns={'comm': 'metric'}
-            )[['metric'] + self.ana.wa_paths]
+            )[['metric'] + self.ana.tags]
             parts.append(wakeup_latency)
 
         if 'tasks_cpu_residency_per_task' in self.ana.summary:
             task_cpu_res = self.ana.summary['tasks_cpu_residency_per_task'].copy().query("cluster == 'total'")
             task_cpu_res['perc_diff'] = task_cpu_res['perc_diff'].apply(lambda s: f"({s})")
             task_cpu_res['value'] = task_cpu_res['value'] + " " + task_cpu_res['perc_diff']
-            task_cpu_res = task_cpu_res.pivot(values='value', columns='kernel', index='comm').reset_index().rename(
+            task_cpu_res = task_cpu_res.pivot(values='value', columns='tag', index='comm').reset_index().rename(
                 columns={'comm': 'metric'}
-            )[['metric'] + self.ana.wa_paths]
+            )[['metric'] + self.ana.tags]
             task_cpu_res['metric'] = "CPU residency (" + task_cpu_res['metric'] + ")"
             parts.append(task_cpu_res)
 
@@ -720,14 +716,14 @@ class WorkloadNotebookPlotter:
 
     def _load_power_meter(self):
         def postprocess_pixel6_emeter_means(df):
-            df_total = df.groupby(['wa_path', 'kernel', 'iteration']).sum(numeric_only=True).reset_index()
+            df_total = df.groupby(['tag', 'kernel', 'iteration']).sum(numeric_only=True).reset_index()
             df_total['channel'] = 'Total'
 
             df_cpu_total = df.query("channel.str.startswith('CPU')").groupby(
-                ['wa_path', 'kernel', 'iteration']
+                ['tag', 'kernel', 'iteration']
             ).sum(numeric_only=True).reset_index()
             df_cpu_total['channel'] = 'CPU'
-            return pd.concat([df, df_cpu_total, df_total])[['wa_path', 'kernel', 'iteration', 'channel', 'power']]
+            return pd.concat([df, df_cpu_total, df_total])[['tag', 'kernel', 'iteration', 'channel', 'power']]
 
         self.ana.load_combined_analysis('pixel6_emeter.pqt')
         log.info('Loaded pixel6_emeter into analysis')
@@ -779,7 +775,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        ptable(self.ana.analysis['overutilized_mean'].rename(columns={'wa_path': 'tag'}))
+        ptable(self.ana.analysis['overutilized_mean'][['metric', 'tag', 'time', 'total_time', 'percentage']])
         self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
 
@@ -823,7 +819,7 @@ class WorkloadNotebookPlotter:
             return df.groupby(['iteration', 'kernel', 'wa_path']).mean().reset_index()
 
         def postprocess_thermal(df):
-            for col in [c for c in df.columns if c not in ['time', 'iteration', 'kernel', 'wa_path']]:
+            for col in [c for c in df.columns if c not in ['time', 'iteration', 'kernel', 'tag', 'wa_path']]:
                 df[col] = df[col] / 1000
             df = round(df, 2)
             return df
@@ -831,7 +827,7 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('thermal.pqt', preprocess=preprocess_thermal, postprocess=postprocess_thermal)
         log.info('Loaded thermal into analysis')
         self.ana.analysis['thermal_melt'] = pd.melt(self.ana.analysis['thermal'],
-                                                    id_vars=['iteration', 'wa_path', 'kernel'],
+                                                    id_vars=['iteration', 'tag', 'kernel'],
                                                     value_vars=['little', 'mid', 'big']
                                                     ).rename(columns={'variable': 'cluster'})
         log.info('Loaded thermal_melt into analysis')
@@ -868,9 +864,9 @@ class WorkloadNotebookPlotter:
             counters = self.ana.config['notebook']['perf_counters'].get()
 
         ds = hv.Dataset(self.ana.results_perf, [
-            'iteration', hv.Dimension('wa_path', values=self.ana.wa_paths), hv.Dimension('metric', values=counters)
+            'iteration', hv.Dimension('tag', values=self.ana.tags), hv.Dimension('metric', values=counters)
         ], 'value')
-        layout = ds.select(metric=counters).to(hv.Curve, 'iteration', 'value').overlay('wa_path').opts(
+        layout = ds.select(metric=counters).to(hv.Curve, 'iteration', 'value').overlay('tag').opts(
             legend_position='bottom'
         ).layout('metric').opts(shared_axes=False, title=title).cols(3)
         layout.opts(
@@ -889,7 +885,7 @@ class WorkloadNotebookPlotter:
             counters = self.ana.config['notebook']['perf_counters'].get()
 
         self.ana.plot_gmean_bars(
-            self.ana.results_perf.query("metric in @counters")[['kernel', 'wa_path', 'iteration', 'metric', 'value']],
+            self.ana.results_perf.query("metric in @counters")[['kernel', 'tag', 'iteration', 'metric', 'value']],
             x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height,
             percentage=percentage
         )
@@ -899,8 +895,8 @@ class WorkloadNotebookPlotter:
     def _load_idle_residency(self):
         self.ana.load_combined_analysis('idle_residency.pqt')
         self.ana.analysis['idle_residency'] = self.ana.analysis['idle_residency'].groupby(
-            ['wa_path', 'cluster', 'idle_state'], sort=False
-        ).mean(numeric_only=True).reset_index()[['wa_path', 'cluster', 'idle_state', 'time']]
+            ['tag', 'cluster', 'idle_state'], sort=False
+        ).mean(numeric_only=True).reset_index()[['tag', 'cluster', 'idle_state', 'time']]
         self.ana.analysis['idle_residency']['time'] = round(self.ana.analysis['idle_residency']['time'], 2)
         log.info('Loaded idle_residency into analysis')
 
@@ -910,9 +906,9 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['idle_resdiency'] = self.ana.analysis['idle_residency']
-        ptable(self.ana.analysis['idle_residency'].rename(columns={'wa_path': 'tag'}))
+        ptable(self.ana.analysis['idle_residency'])
         fig = px.bar(
-            self.ana.analysis['idle_residency'], x='idle_state', y='time', color='wa_path',
+            self.ana.analysis['idle_residency'], x='idle_state', y='time', color='tag',
             facet_col='cluster', barmode='group', text=self.ana.analysis['idle_residency']['time'],
             width=width, height=height, title=title
         )
@@ -922,7 +918,7 @@ class WorkloadNotebookPlotter:
     def _load_idle_miss(self):
         def preprocess_cpu_idle_miss_df(df):
             df = df.groupby(['wa_path', 'kernel', 'cluster', 'below']).sum().reset_index()
-            wa_path = trim_wa_path(df['wa_path'].iloc[0])
+            wa_path = df['wa_path'].iloc[0]
             if not wa_path:
                 return df
             wakeup_count = len(self.ana.analysis['cpu_idle'].query("wa_path == @wa_path and state == -1"))
@@ -932,7 +928,7 @@ class WorkloadNotebookPlotter:
         def postprocess_cpu_idle_miss_df(df):
             df['type'] = df['below'].replace(0, 'too deep').replace(1, 'too shallow')
             df['order'] = df['cluster'].replace('little', 0).replace('mid', 1).replace('big', 2)
-            df = df.sort_values(by=['wa_path', 'kernel', 'order', 'type'])
+            df = df.sort_values(by=['tag', 'kernel', 'order', 'type'])
             return df
 
         self.ana.load_combined_analysis('cpu_idle.pqt')
@@ -949,12 +945,12 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['idle_miss'] = self.ana.analysis['cpu_idle_miss_counts'].groupby(
-            ['wa_path', 'type']
-        ).sum().reset_index()[['wa_path', 'type', 'count_perc']]
+            ['tag', 'type']
+        ).sum().reset_index()[['tag', 'type', 'count_perc']]
 
-        ptable(self.ana.summary['idle_miss'].rename(columns={'wa_path': 'tag'}))
+        ptable(self.ana.summary['idle_miss'])
         fig = px.bar(
-            self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='wa_path',
+            self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='tag',
             facet_col='cluster', barmode='group', text=self.ana.analysis['cpu_idle_miss_counts']['count_perc'],
             width=width, height=height, title=title
         )
@@ -966,7 +962,7 @@ class WorkloadNotebookPlotter:
         self.ana.load_combined_analysis('energy_estimate_mean.pqt')
         log.info('Loaded energy_estimate_mean into analysis')
         self.ana.analysis['energy_estimate_melt'] = pd.melt(
-            self.ana.analysis['energy_estimate_mean'], id_vars=['iteration', 'wa_path'],
+            self.ana.analysis['energy_estimate_mean'], id_vars=['iteration', 'tag'],
             value_vars=['little', 'mid', 'big', 'total']
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded energy_estimate_melt into analysis')
@@ -1001,7 +997,7 @@ class WorkloadNotebookPlotter:
         log.info('Loaded sched_pelt_cfs_mean into analysis')
         self.ana.analysis['sched_pelt_cfs_melt'] = pd.melt(
             self.ana.analysis['sched_pelt_cfs_mean'],
-            id_vars=['iteration', 'wa_path', 'kernel', 'cluster'], value_vars=['util', 'load']
+            id_vars=['iteration', 'tag', 'kernel', 'cluster'], value_vars=['util', 'load']
         )
         log.info('Loaded sched_pelt_cfs_melt into analysis')
 
@@ -1014,12 +1010,12 @@ class WorkloadNotebookPlotter:
         signals = ['util', 'load']
         ds = hv.Dataset(
             self.ana.analysis['sched_pelt_cfs_mean'],
-            ['iteration', hv.Dimension('wa_path', values=self.ana.wa_paths),
+            ['iteration', hv.Dimension('tag', values=self.ana.tags),
              hv.Dimension('cluster', values=self.ana.CLUSTERS)],
             signals
         )
         layout = hv.Layout([
-            ds.to(hv.Curve, 'iteration', signal).overlay('wa_path').opts(legend_position='bottom').layout(
+            ds.to(hv.Curve, 'iteration', signal).overlay('tag').opts(legend_position='bottom').layout(
                 'cluster'
             ).opts(title=f"{title} {signal}", framewise=True)
             for signal in signals
@@ -1046,7 +1042,7 @@ class WorkloadNotebookPlotter:
     def _load_wakeup_latency(self):
         def postprocess_wakeup_latency_mean(df):
             df = df.rename(columns={'wakeup_latency': 'value'})
-            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            df['order'] = df['tag'].map(lambda x: self.ana.tags.index(x))
             df['unit'] = 'x'
             return df
 
@@ -1054,7 +1050,7 @@ class WorkloadNotebookPlotter:
         log.info('Loaded wakeup_latency_mean into analysis')
 
         def postprocess_wakeup_latency(df):
-            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            df['order'] = df['tag'].map(lambda x: self.ana.tags.index(x))
             df['cluster'] = df['cpu'].copy().apply(cpu_cluster)
             df['order_cluster'] = df['cluster'].map(lambda x: self.ana.CLUSTERS.index(x))
             df['target_cluster'] = df['target_cpu'].copy().apply(cpu_cluster)
@@ -1065,23 +1061,23 @@ class WorkloadNotebookPlotter:
         log.info('Loaded wakeup_latency into analysis')
 
         self.ana.analysis['wakeup_latency_quantiles'] = self.ana.analysis['wakeup_latency'].groupby([
-            'comm', 'wa_path', 'iteration'
+            'comm', 'tag', 'iteration'
         ]).quantile([0.9, 0.95, 0.99], numeric_only=True).reset_index()[
-            ['comm', 'wa_path', 'level_3', 'iteration', 'wakeup_latency', 'order']
+            ['comm', 'tag', 'level_3', 'iteration', 'wakeup_latency', 'order']
         ].rename(columns={'level_3': 'quantile'}).sort_values(by=['comm', 'order'])
         log.info('Loaded wakeup_latency_quantiles into analysis')
 
         self.ana.analysis['wakeup_latency_execution_cluster'] = self.ana.analysis['wakeup_latency'].groupby([
-            'comm', 'wa_path', 'cluster'
+            'comm', 'tag', 'cluster'
         ]).mean(numeric_only=True).reset_index().sort_values(by=['comm', 'order_cluster', 'order'])[
-            ['comm', 'wa_path', 'cluster', 'wakeup_latency']
+            ['comm', 'tag', 'cluster', 'wakeup_latency']
         ]
         log.info('Loaded wakeup_latency_execution_cluster into analysis')
 
         self.ana.analysis['wakeup_latency_target_cluster'] = self.ana.analysis['wakeup_latency'].groupby([
-            'comm', 'wa_path', 'target_cluster'
+            'comm', 'tag', 'target_cluster'
         ]).mean(numeric_only=True).reset_index().sort_values(by=['comm', 'order_target_cluster', 'order'])[
-            ['comm', 'wa_path', 'target_cluster', 'wakeup_latency']
+            ['comm', 'tag', 'target_cluster', 'wakeup_latency']
         ]
         log.info('Loaded wakeup_latency_target_cluster into analysis')
 
@@ -1104,7 +1100,7 @@ class WorkloadNotebookPlotter:
 
         self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
             self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=columns,
-            title=title, table_sort=['comm', 'kernel'], gmean_round=0, width=width, height=height, percentage=percentage
+            title=title, table_sort=['comm', 'tag'], gmean_round=0, width=width, height=height, percentage=percentage
         )
 
     @requires_analysis(['wakeup_latency_quantiles'])
@@ -1126,7 +1122,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         fig = px.bar(
-            self.ana.analysis['wakeup_latency_execution_cluster'], x='cluster', y='wakeup_latency', color='wa_path',
+            self.ana.analysis['wakeup_latency_execution_cluster'], x='cluster', y='wakeup_latency', color='tag',
             facet_col='comm', barmode='group', facet_col_wrap=1, width=width, height=height, title=title,
             text=self.ana.analysis['wakeup_latency_execution_cluster']['wakeup_latency'].apply(trim_number),
         )
@@ -1144,7 +1140,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         fig = px.bar(
-            self.ana.analysis['wakeup_latency_target_cluster'], x='target_cluster', y='wakeup_latency', color='wa_path',
+            self.ana.analysis['wakeup_latency_target_cluster'], x='target_cluster', y='wakeup_latency', color='tag',
             facet_col='comm', barmode='group', facet_col_wrap=1, width=width, height=height, title=title,
             text=self.ana.analysis['wakeup_latency_target_cluster']['wakeup_latency'].apply(trim_number),
         )
@@ -1160,23 +1156,23 @@ class WorkloadNotebookPlotter:
     def _load_wakeup_latency_cgroup(self):
         def postprocess_cgroup_latency(df):
             df = df.rename(columns={'wakeup_latency': 'value'})
-            df['order'] = df['wa_path'].map(lambda x: self.ana.wa_paths.index(x))
+            df['order'] = df['tag'].map(lambda x: self.ana.tags.index(x))
             return df
 
         self.ana.load_combined_analysis('wakeup_latency_cgroup.pqt', postprocess=postprocess_cgroup_latency)
         log.info('Loaded wakeup_latency_cgroup into analysis')
 
         self.ana.analysis['wakeup_latency_cgroup_mean'] = self.ana.analysis['wakeup_latency_cgroup'].groupby(
-            ["wa_path", "cgroup", "iteration", "order"]
+            ["tag", "cgroup", "iteration", "order"]
         ).mean(numeric_only=True).reset_index().sort_values(by=["order", "cgroup", "iteration"])[
-            ['wa_path', 'cgroup', 'iteration', 'value', 'order']
+            ['tag', 'cgroup', 'iteration', 'value', 'order']
         ]
         log.info('Loaded wakeup_latency_cgroup_mean into analysis')
 
         self.ana.analysis['wakeup_latency_cgroup_quantiles'] = self.ana.analysis['wakeup_latency_cgroup'].groupby(
-            ['cgroup', 'wa_path', 'iteration']
+            ['cgroup', 'tag', 'iteration']
         ).quantile([0.9, 0.95, 0.99], numeric_only=True).reset_index()[
-            ['cgroup', 'wa_path', 'level_3', 'iteration', 'value', 'order']
+            ['cgroup', 'tag', 'level_3', 'iteration', 'value', 'order']
         ].rename(columns={'level_3': 'quantile'}).sort_values(by=['cgroup', 'order'])
         log.info('Loaded wakeup_latency_cgroup_quantiles into analysis')
 
@@ -1230,15 +1226,15 @@ class WorkloadNotebookPlotter:
 
         self.ana.analysis['tasks_residency_cpu_total_melt'] = pd.melt(
             self.ana.analysis['tasks_residency_cpu_total'],
-            id_vars=['iteration', 'wa_path', 'kernel'], value_vars=cpus_prefix
-        ).rename(columns={'variable': 'cpu'}).sort_values(['wa_path', 'kernel', 'iteration', 'cpu'])
+            id_vars=['iteration', 'tag', 'kernel'], value_vars=cpus_prefix
+        ).rename(columns={'variable': 'cpu'}).sort_values(['tag', 'kernel', 'iteration', 'cpu'])
         log.info('Loaded tasks_residency_cpu_total_melt into analysis')
 
         # TODO: sort by order of clusters
         self.ana.analysis['tasks_residency_cpu_total_cluster_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency_cpu_total'], id_vars=['iteration', 'wa_path', 'kernel'],
+            self.ana.analysis['tasks_residency_cpu_total'], id_vars=['iteration', 'tag', 'kernel'],
             value_vars=self.ana.CLUSTERS_TOTAL
-        ).rename(columns={'variable': 'cluster'}).sort_values(['wa_path', 'kernel', 'iteration', 'cluster'])
+        ).rename(columns={'variable': 'cluster'}).sort_values(['tag', 'kernel', 'iteration', 'cluster'])
         log.info('Loaded tasks_residency_cpu_total_cluster_melt into analysis')
 
         def postprocess_tasks_residency_total(df):
@@ -1252,15 +1248,15 @@ class WorkloadNotebookPlotter:
         log.info('Loaded tasks_residency_total into analysis')
 
         self.ana.analysis['tasks_residency_total_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'tag', 'kernel', 'comm'],
             value_vars=cpus_prefix
-        ).rename(columns={'variable': 'cpu'}).sort_values(['wa_path', 'kernel', 'iteration', 'cpu'])
+        ).rename(columns={'variable': 'cpu'}).sort_values(['tag', 'kernel', 'iteration', 'cpu'])
         log.info('Loaded tasks_residency_total_melt into analysis')
 
         self.ana.analysis['tasks_residency_total_cluster_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            self.ana.analysis['tasks_residency_total'], id_vars=['iteration', 'tag', 'kernel', 'comm'],
             value_vars=self.ana.CLUSTERS_TOTAL
-        ).rename(columns={'variable': 'cluster'}).sort_values(['wa_path', 'kernel', 'iteration', 'cluster'])
+        ).rename(columns={'variable': 'cluster'}).sort_values(['tag', 'kernel', 'iteration', 'cluster'])
         log.info('Loaded tasks_residency_total_cluster_melt into analysis')
 
         def postprocess_tasks_residency(df):
@@ -1274,7 +1270,7 @@ class WorkloadNotebookPlotter:
         log.info('Loaded tasks_residency into analysis')
 
         self.ana.analysis['tasks_residency_cluster_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency'], id_vars=['iteration', 'wa_path', 'kernel', 'comm'],
+            self.ana.analysis['tasks_residency'], id_vars=['iteration', 'tag', 'kernel', 'comm'],
             value_vars=self.ana.CLUSTERS_TOTAL
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded tasks_residency_cluster_melt into analysis')
@@ -1331,7 +1327,7 @@ class WorkloadNotebookPlotter:
     def _load_cgroup_cpu_residency(self):
         def postprocess_cgroup_task_residency(df):
             df = df.rename(columns={'Total': 'total'})[
-                ['wa_path', 'cgroup', 'iteration', 'total', 'little', 'mid', 'big'] + self.ana.CPUS
+                ['tag', 'cgroup', 'iteration', 'total', 'little', 'mid', 'big'] + self.ana.CPUS
             ]
             return df
 
@@ -1340,13 +1336,13 @@ class WorkloadNotebookPlotter:
         log.info('Loaded tasks_residency_cgroup_total into analysis')
 
         self.ana.analysis['cgroup_residency_total_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'wa_path', 'cgroup'],
+            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'tag', 'cgroup'],
             value_vars=self.ana.CPUS
         ).rename(columns={'variable': 'cpu'})
         log.info('Loaded cgroup_residency_total_melt into analysis')
 
         self.ana.analysis['cgroup_residency_total_cluster_melt'] = pd.melt(
-            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'wa_path', 'cgroup'],
+            self.ana.analysis['tasks_residency_cgroup_total'], id_vars=['iteration', 'tag', 'cgroup'],
             value_vars=self.ana.CLUSTERS_TOTAL
         ).rename(columns={'variable': 'cluster'})
         log.info('Loaded cgroup_residency_total_cluster_melt into analysis')
@@ -1385,7 +1381,7 @@ class WorkloadNotebookPlotter:
         log.info('Loaded task_activations_stats_cluster into analysis')
         self.ana.analysis['task_activations_stats_cluster_melt'] = pd.melt(
             self.ana.analysis['task_activations_stats_cluster'],
-            id_vars=['kernel', 'wa_path', 'iteration', 'cluster', 'comm'], value_vars=['count', 'duration']
+            id_vars=['kernel', 'tag', 'iteration', 'cluster', 'comm'], value_vars=['count', 'duration']
         )
         log.info('Loaded task_activations_stats_cluster_melt into analysis')
 
@@ -1401,7 +1397,7 @@ class WorkloadNotebookPlotter:
 
         for task, task_df in data.groupby('comm'):
             self.ana.plot_lines_px(
-                task_df, x='iteration', y='count', color='wa_path', facet_col='cluster',
+                task_df, x='iteration', y='count', color='tag', facet_col='cluster',
                 facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
             )
 
@@ -1417,7 +1413,7 @@ class WorkloadNotebookPlotter:
 
         for task, task_df in data.groupby('comm'):
             self.ana.plot_lines_px(
-                task_df, x='iteration', y='count', color='wa_path', facet_col='cluster',
+                task_df, x='iteration', y='count', color='tag', facet_col='cluster',
                 facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
             )
 
@@ -1455,18 +1451,18 @@ class WorkloadNotebookPlotter:
             height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
         )
 
-    def task_activations_detailed(self, wa_path_a, wa_path_b, iteration, comm, columns=1, include_label=True):
+    def task_activations_detailed(self, tag_a, tag_b, iteration, comm, columns=1, include_label=True):
         title = f'{comm} activations in iteration {iteration}'
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        plot_a = self.ana.traces[wa_path_a][iteration].ana.tasks.plot_tasks_activation(
-            self.ana.traces[wa_path_a][iteration].get_task_ids(comm)
-        ).opts(title=f"{title} of {wa_path_a}")
+        plot_a = self.ana.traces[tag_a][iteration].ana.tasks.plot_tasks_activation(
+            self.ana.traces[tag_a][iteration].get_task_ids(comm)
+        ).opts(title=f"{title} of {tag_a}")
 
-        plot_b = self.ana.traces[wa_path_b][iteration].ana.tasks.plot_tasks_activation(
-            self.ana.traces[wa_path_b][iteration].get_task_ids(comm)
-        ).opts(title=f"{title} of {wa_path_b}")
+        plot_b = self.ana.traces[tag_b][iteration].ana.tasks.plot_tasks_activation(
+            self.ana.traces[tag_b][iteration].get_task_ids(comm)
+        ).opts(title=f"{title} of {tag_b}")
 
         return (plot_a + plot_b).cols(columns).opts(shared_axes=False)
 
@@ -1488,13 +1484,12 @@ class WorkloadNotebookPlotter:
 
         ds = hv.Dataset(
             self.ana.analysis['uclamp_updates'],
-            ['time_it', hv.Dimension('wa_path', values=self.ana.wa_paths), 'iteration', 'uclamp_id', 'task'],
+            ['time_it', hv.Dimension('tag', values=self.ana.tags), 'iteration', 'uclamp_id', 'task'],
             ['value']
         )
-        layout = ds.to(hv.Curve, 'time_it', 'value').overlay('wa_path').opts(shared_axes=False, title=title)
+        layout = ds.to(hv.Curve, 'time_it', 'value').overlay('tag').opts(shared_axes=False, title=title)
 
         layout.opts(
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
         return layout
-
