@@ -31,64 +31,11 @@ from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, flatten, c
 from wp.constants import APP_NAME
 
 
-def setup_notebook():
-    import plotly.io as pio
-    from holoviews import opts
-    from bokeh.themes import built_in_themes
-
-    hv.extension('bokeh')
-    hv.renderer('bokeh').theme = built_in_themes['dark_minimal']
-    hv.renderer('bokeh').webgl = True
-    pio.templates.default = "plotly"
-    pio.templates.default = "plotly_dark"
-
-    color_cycle = hv.Cycle([
-        '#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'
-    ])
-
-    opts.defaults(
-        opts.Curve(tools=['hover'], show_grid=True, color=color_cycle, muted_alpha=0),
-        opts.Table(bgcolor='black')
-    )
-
-
-def trim_number(x):
-    if x > 1000000000:
-        return f"{round(x / 1000000000, 3)}B"
-    if x > 1000000:
-        return f"{round(x / 1000000, 3)}M"
-    if x > 10000:
-        return f"{round(x / 1000, 2)}k"
-        return str(x)
-    if x != 0 and x < 0.01:
-        return f"{round(x * 1000000, 2)}μ"
-    return str(x)
-
-
-def format_percentage(vals, perc, pvals, pval_threshold=0.02):
-    result = round(perc, 2).astype(str).apply(
-        lambda s: f"({'' if s.startswith('-') or (s == '0.0') else '+'}{s}%)"
-    ).to_frame()
-    result['vals'] = vals.apply(lambda x: trim_number(x))
-    result['pvals'] = pvals
-    result['pval_marker'] = pvals.apply(lambda x: "* " if x < pval_threshold else "")
-    result['value'] = result['vals'] + " " + result['pval_marker'] + result['value']
-    return result['value']
-
-
-def ptable(df):
-    print(tabulate(df, headers='keys', tablefmt='pretty', showindex=False, floatfmt=".3f"))
-
-
-def trim_wa_path(path):
-    return "_".join(path.split("_")[1:-2])
-
-
 class WorkloadNotebookAnalysis:
     """
     Container class for analysis of different runs (potentially with many iterations) of a single workload.
 
-    ```
+    ```python
     gb5 = WorkloadNotebookAnalysis('/home/user/tmp/geekbench/', [
         'geekbench_baseline_3_3101',
         'geekbench_ufc_feec_all_cpus_3_3001',
@@ -192,6 +139,7 @@ class WorkloadNotebookAnalysis:
         })
 
     def show(self):
+        """Print the results dataframe, benchmark_dirs, tags and kernels versions"""
         display(self.results)
         print('benchmark_dirs:', self.benchmark_dirs)
         print('tags:', self.tags)
@@ -226,10 +174,51 @@ class WorkloadNotebookAnalysis:
             result = postprocess(result)
         self.analysis[name.split('.')[0]] = result
 
-    def plot_gmean_bars(self, df, x='stat', y='value', facet_col='metric', facet_col_wrap=3, title='',
-                        width=None, height=600, gmean_round=1, include_columns=[], table_sort=None,
-                        order_cluster=False, sort_ascending=False, include_total=False, debug=False,
-                        percentage=True):
+    def plot_gmean_bars(self, df: pd.DataFrame, x: str = 'stat', y: str = 'value', color: str = 'tag',
+                        facet_col: str = 'metric', facet_col_wrap: int = 3, title: str = 'Gmean values',
+                        width: int = None, height: int = 600, gmean_round: int = 1,
+                        include_columns: List[str] = [], table_sort: List[str] = None,
+                        order_cluster: bool = False, sort_ascending: bool = False, include_total: bool = False,
+                        debug: bool = False, percentage: bool = True) -> pd.DataFrame:
+        """
+        Plot gmean values of some metric with statistical analysis attached.
+        It's mainly intended as a way of comparing multiple iterations across workloads and so
+        it expects a melt-like (`pd.melt`) dataframe to plot.
+
+        The function heavily relies on multiple assumptions about the underlying dataframe so it might break if those
+        are not met.
+
+        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `self.px_figures`.
+
+        :param df: Dataframe with the data to plot
+        :param x: Column denoting the x axis
+        :param y: Column denoting the y axis
+        :param color: Column denoting how to split the data into bars
+        :param facet_col: Column denoting how to split the plot into facets
+        :param facet_col_wrap: Number of facet column in one row of the plot
+        :param title: Displayed title of the plot
+        :param width: Plot width
+        :param height: Plot height
+        :param gmean_round: Number of decimal places to round the gmeans to
+        :param include_columns: Other columns to include in the resulting data table
+        :param table_sort: List of columns to sort the data table by
+        :param order_cluster: Order the plot by CPU clusters
+        :param sort_ascending: Order the plot by ascending values
+        :param include_total: Include the 'total' column alongside the clusters
+        :param debug: Insert a pdb breakpoint before computing the dataframes
+        :param percentage: Include percentage differences and check pvalues
+
+        :return: Dataframe of the ASCII table that will be printed above the resulting plot.
+
+        The resulting dataframe can be included in the summary dict for later use as shown below.
+        ```python
+        gb5.summary['scores'] = gb5.plot_gmean_bars(
+            gb5.results, x='stat', y='value', facet_col='metric', facet_col_wrap=3,
+            title='gmean benchmark score', width=1600, height=600
+        )
+        ```
+
+        """
 
         shown_clusters = self.CLUSTERS if not include_total else self.CLUSTERS_TOTAL
         if 'unit' not in df.columns:
@@ -301,7 +290,7 @@ class WorkloadNotebookAnalysis:
         ) if percentage else gmeans_mean['value']
 
         # plot bars
-        fig = px.bar(gmeans_mean, x=x, y=y, color='tag', facet_col=facet_col, facet_col_wrap=facet_col_wrap,
+        fig = px.bar(gmeans_mean, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                      barmode='group', title=title, width=width, height=height,
                      text=plot_text)
         fig.update_traces(textposition='outside')
@@ -313,8 +302,27 @@ class WorkloadNotebookAnalysis:
 
         return data_table
 
-    def plot_lines_px(self, df, x='iteration', y='value', color='tag', facet_col=None, facet_col_wrap=2,
-                      height=600, width=None, title=None, scale_y=False, renderer='iframe'):
+    def plot_lines_px(self, df: pd.DataFrame, x: str = 'iteration', y: str = 'value',
+                      color: str = 'tag', facet_col: str = None, facet_col_wrap: int = 2,
+                      height: int = 600, width: int = None, title: str = None,
+                      scale_y: bool = False, renderer: str = 'iframe'):
+        """
+        Plot lines of some metric, e.g across iterations.
+
+        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `self.px_figures`.
+
+        :param df: Dataframe with the data to plot
+        :param x: Column denoting the x axis
+        :param y: Column denoting the y axis
+        :param color: Column denoting how to split the data into lines
+        :param facet_col: Column denoting how to split the plot into facets
+        :param facet_col_wrap: Number of facet column in one row of the plot
+        :param title: Displayed title of the plot
+        :param width: Plot width
+        :param height: Plot height
+        :param scale_y: Whether the y axis should maintain the same scale across facets
+        :param renderer: Plotly express renderer to be used
+        """
         fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                       height=height, width=width, title=title)
         if not scale_y:
@@ -327,7 +335,14 @@ class WorkloadNotebookAnalysis:
             '__', '_'
         ) + '__' + "__".join(self.tags) + suffix
 
-    def save_image_plots(self, directory, extension='png', width=1800):
+    def save_image_plots(self, directory: str, extension: str = 'png', width: int = 1800):
+        """
+        Save all image plots contained in `px_figures` and `hv_figures` into a directory.
+
+        :param directory: Directory to save the plots into
+        :param extension: File extension of the resulting plots
+        :param width: Width of the resulting plots
+        """
         for name, fig in self.px_figures.items():
             filename = f"{directory}/{name}.{extension}"
             self.px_figures[name].write_image(filename, width=width)
@@ -1551,3 +1566,57 @@ class WorkloadNotebookPlotter:
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
         return layout
+
+
+def setup_notebook():
+    import plotly.io as pio
+    from holoviews import opts
+    from bokeh.themes import built_in_themes
+
+    hv.extension('bokeh')
+    hv.renderer('bokeh').theme = built_in_themes['dark_minimal']
+    hv.renderer('bokeh').webgl = True
+    pio.templates.default = "plotly"
+    pio.templates.default = "plotly_dark"
+
+    color_cycle = hv.Cycle([
+        '#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'
+    ])
+
+    opts.defaults(
+        opts.Curve(tools=['hover'], show_grid=True, color=color_cycle, muted_alpha=0),
+        opts.Table(bgcolor='black')
+    )
+
+
+def trim_number(x):
+    if x > 1000000000:
+        return f"{round(x / 1000000000, 3)}B"
+    if x > 1000000:
+        return f"{round(x / 1000000, 3)}M"
+    if x > 10000:
+        return f"{round(x / 1000, 2)}k"
+        return str(x)
+    if x != 0 and x < 0.01:
+        return f"{round(x * 1000000, 2)}μ"
+    return str(x)
+
+
+def format_percentage(vals, perc, pvals, pval_threshold=0.02):
+    result = round(perc, 2).astype(str).apply(
+        lambda s: f"({'' if s.startswith('-') or (s == '0.0') else '+'}{s}%)"
+    ).to_frame()
+    result['vals'] = vals.apply(lambda x: trim_number(x))
+    result['pvals'] = pvals
+    result['pval_marker'] = pvals.apply(lambda x: "* " if x < pval_threshold else "")
+    result['value'] = result['vals'] + " " + result['pval_marker'] + result['value']
+    return result['value']
+
+
+def ptable(df):
+    print(tabulate(df, headers='keys', tablefmt='pretty', showindex=False, floatfmt=".3f"))
+
+
+def trim_wa_path(path):
+    return "_".join(path.split("_")[1:-2])
+
