@@ -1,11 +1,11 @@
 # workload-processor
 
-This project is an automated workload processor designed to be a simplified way of applying analysis provided by [Lisa](https://github.com/ARM-software/lisa) to workloads created by [workload-automation](https://github.com/ARM-software/workload-automation)
+Automated workload processor designed to be a simplified way of applying analysis provided by [Lisa](https://github.com/ARM-software/lisa) to workloads created by [workload-automation](https://github.com/ARM-software/workload-automation)
 It came around as a way of automating my own workflows and so to a large extent it comes as-is and it very likely contains many assumptions about how certain things are done that might not be the case for others.
 
 ## Installing
 
-This project is built on top of [Lisa](https://github.com/ARM-software/lisa) and Lisa needs to be installed for it to work.
+workload-processor is built on top of [Lisa](https://github.com/ARM-software/lisa) and Lisa needs to be installed for it to work.
 
 1. Clone and install Lisa (follow instructions from the project)
 2. Clone this project (`git clone https://github.com/mrkajetanp/workload-processor`)
@@ -17,7 +17,7 @@ This project is built on top of [Lisa](https://github.com/ARM-software/lisa) and
 workload-processor is split into 4 parts - the runner, the processor, the device controller and the notebook analysis.
 All of the parts can easily function separately but they are desgined to make using them all together as easy as possible and to some extent are interdependent.
 
-### Configuration
+## Configuration
 
 Different parts of the tool use the configuration options below.
 By default, the values in wp/config_default.yaml will be used. They can be overridden as-needed in ~/.config/workload-processor/config.yaml.
@@ -37,16 +37,20 @@ host:
 
 Additionally, the following things can be configured in the same way:
 * important tasks for each workload to be selected in analysis
+* perf counter ids to be selected and renamed
+* cgroups to be considered in cgroup-related functiosn
+* clusters denoting names and types of cpus
+* thermal zones present on the target device
 
 Consult wp/config_default.yaml for the complete set of overrideable options.
 
-### Entry points
+## Entry points
 
 The main entry point to the project is through the command line (installed as `workload-processor` into the Lisa PATH using the instructions above).
 Alternatively, all of the internals are accessible through the `wp` python package inside their respective modules.
-The main module intended to be accessed by end users is `wp.notebook` for the notebook analysis. More on that later.
+The main module intended to be accessed by end users is `wp.notebook` for the notebook analysis.
 
-### The runner
+## The runner
 
 The runner (accessible through `workload-processor run`) is simply a wrapper around the [workload-automation](https://github.com/ARM-software/workload-automation) project bundled with Lisa.
 Using it is completely optional, invoking WA directly will work just as well apart from requiring some extra steps.
@@ -68,7 +72,7 @@ They can either be modified directly or copied and then given to the runner by p
 workload-processor run agenda.yaml baseline
 ```
 
-#### Relevant help section
+### Relevant help section
 
 ```
 usage: WA Workload Processor run [-h] [-d DIR] [-n] [-f] [-a] workload [tag]
@@ -85,15 +89,15 @@ optional arguments:
   -a, --auto-process  Auto process after the run completes
 ```
 
-#### workload-automation plugins
+### workload-automation plugins
 
 Some useful non-upstreamed workload-automation plugins can be found under the plugins/ directory.
 In order to make them available to WA they just need to be put under `~/.workload_automation/plugins/`.
 
-### The processor
+## The processor
 
 The processor is the main part of this project. It can be accessed using `workload-processor process`.
-It functions by applying some sort of analysis (metrics found in wp/processor.py) on top of each trace in the run, then aggregating them into one tagged dataframe and saving it as pqt to `analysis/` inside the run directory.
+It functions by applying some sort of analysis (metrics found in `wp/processor.py`) on top of each trace in the run, then aggregating them into one tagged dataframe and saving it as pqt to `analysis/` inside the run directory.
 These generated pqts can then be either read manually, by the provided notebooks or by custom-made notebooks.
 If no metrics are provided, the default is to apply all of them in turn which might take multiple hours.
 
@@ -105,7 +109,7 @@ workload-processor process speedometer_baseline_10_0812 -m power
 This will result in `pixel6_emeter.pqt` & `pixel6_emeter_mean.pqt` being created in `speedometer_baseline_10_0812/analysis`.
 Multiple space-separated metrics can be provided to the `-m` argument, they will be processed in order.
 
-#### Trace parsing
+### Trace parsing
 
 By default, the tool is designed to use the experimental Rust trace parser `trace-parquet` as long as it can be found in the PATH.
 Before processing the workload, if any of the iterations do not contain a `trace-events` directory one will be created and `trace-parquet` will be called on its trace to generate `.pq` files for each event.
@@ -114,11 +118,11 @@ This pre-parsing behaviour can be forced with `-i/--init`. Using the parser resu
 If `trace-parquet` is not found or `--no-parser` was passed the tool will default to the normal Lisa way of creating traces.
 While much slower it might be useful for some cases where `trace-parquet` might not work.
 
-#### Relevant help section
+### Relevant help section
 
 ```
 usage: WA Workload Processor process [-h] [-i | --no-parser] [-s]
-                                     [-m {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
+                                     [-m {...} [{...} ...]
                                      | --no-metrics]
                                      wa_path
 
@@ -127,8 +131,7 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -m {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...], --metrics {power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} [{power,idle,idle-miss,freq,overutil,pelt,uclamp,adpf,thermal,perf-trace-event,wakeup-latency,tasks-residency,tasks-activations,cgroup-attach,wakeup-latency-cgroup,tasks-residency-cgroup,energy-estimate} ...]
-                        Metrics to process, defaults to all.
+  -m {...} [{...} ...], --metrics {...} [{...} ...] Metrics to process, defaults to all.
   --no-metrics          Do not process metrics
 
 Trace parsing:
@@ -140,13 +143,13 @@ Trace parsing:
                         Skip trace validation (only when using trace-parquet)
 ```
 
-### Device controller
+## Device controller
 
 The device controller can be accessed through `workload-processor device`.
 It's nothing more than a convenience tool for running `adb` commands to get information or change relevant kernel settings in sysfs.
 The main command is `status` which will just print available information about the status of the device.
 The commands will be run in the provided order and so can be chained (e.g. `workload-processor device sugov-rate-limit status`).
-To check and modify which adb commands will be run just edit `wp/device.py`.
+To check which adb commands will be run just consult `wp.device`.
 
 #### Relevant help section
 
@@ -164,55 +167,58 @@ optional arguments:
   -h, --help            show this help message and exit
 ```
 
-### Notebook analysis
+## Notebook analysis
 
-The notebook analysis part is made up of a python module with extracted common helper code (`wp/notebook.py`) along with the notebooks provided under `ipynb/` which make use of it.
+The notebook analysis part is made up of a python module with extracted common helper code (`wp.notebook`) along with the notebooks provided under `ipynb/` which make use of it.
 Usage examples can be found by simply looking at the provided notebooks.
-The main idea is to contain analysis tied to different runs of a specific workload, e.g. Geekbench, into one python object of WorkloadNotebookAnalysis.
+The main idea is to contain analysis tied to different runs of a specific workload, e.g. Geekbench, into one python object of `wp.notebook.WorkloadNotebookAnalysis`.
 
-#### Creating the analysis object
+### Creating the analysis object
 
-WorkloadNotebookAnalysis takes a directory with benchmark runs and a list of the run directories inside it as arguments.
-The notebooks should be able to automatically adjust to changing the number of runs as long as the number is larger than 1. Providing only 1 might break some statistical analysis code.
+`wp.notebook.WorkloadNotebookAnalysis` takes a directory with benchmark runs and a list of the run directories inside it as arguments.
+The notebooks should be able to automatically adjust to changing the number of runs.
 
 ```
-gb5 = WorkloadNotebookAnalysis('/home/kajpuc01/power/pixel6/geekbench/', [
+gb5 = WorkloadNotebookAnalysis('/home/user/tmp/geekbench/', [
     'geekbench_baseline_3_3101',
     'geekbench_ufc_feec_all_cpus_3_3001',
-])
+], label='Geekbench 5')
 ```
 
-Various metrics related to the workload can then be accessed through said object.
+Various information related to the workload can then be accessed through said object. Consult the class documentation section for details.
 
-```
-gb5.results # the result dataframe from WA
-gb5.results_perf # the resulting perf data if perf was enabled for the run
-gb5.analysis # a dict for holding various analysis metrics, more on that below
-gb5.summary # a dict for holding summary data used by the TLDR/summary cells in the notebooks
-gb5.traces # a dict of <workload_tag>:[traces of iterations], generated with gb5.load_traces()
-```
+### Plotting
 
-#### Plotting statistical comparison bar plots
+Every `wp.notebook.WorkloadNotebookAnalysis` object will automatically be created with an associated object of `wp.notebook.WorkloadNotebookPlotter` accessible through its `plot` property.
+The `plot` proxy can be used to accessed all the pre-defined plotting methods, for the complete list of available plots consult `wp.notebook.WorkloadNotebookPlotter`.
 
-The `plot_gmean_bars` helper method can be used to plot a given dataframe as bars and automatically attach statistical analysis to it.
+#### Manual plotting
+
+The `wp.notebook.WorkloadNotebookAnalysis.plot_gmean_bars` helper method can be used to plot a given dataframe as bars and automatically attach statistical analysis to it.
 It's mainly intended as a way of comparing gmean values of multiple iterations across workloads and so it expects a melt-like (`pd.melt`) dataframe to plot.
-Its signature can be found in `wp/notebook.py` and the function heavily relies on multiple assumptions about the underlying dataframe so it might break.
-It returns a dataframe of the ASCII table that will be printed above the resulting plot. That dataframe can be included in the summary dict for later use as shown.
+It heavily relies on multiple assumptions about the underlying dataframe so it might break.
+The function returns a dataframe of the ASCII table that will be printed above the resulting plot. That dataframe can be included in the summary dict for later use as shown below.
+
+There is a corresponding helper method for line plots - `wp.notebook.WorkloadNotebookAnalysis.plot_lines_px`.
 
 ```
 gb5.summary['scores'] = gb5.plot_gmean_bars(gb5.results, x='stat', y='value', facet_col='metric', facet_col_wrap=3, title='gmean benchmark score', width=1600, height=600)
 ```
 
-#### Loading metrics generated by the processor
+Pre-defined plotting functions in `wp.notebook.WorkloadNotebookPlotter` will include the tables in the summary automatically.
 
-The analysis pqts generated by `workload-processor process` in `analysis/` can be loaded using `load_combined_analysis` as shown below.
+### Loading metrics generated by the processor
+
+When using the pre-defined plotting functions the relevant metrics will automatically be loaded the first time the plot is generated and the re-used. No further steps should be necessary.
+The metrics are loaded using the `wp.notebook.WorkloadNotebookPlotter.requires_analysis` decorator.
+
+To find out which metrics correspond to which private loader functions consult `wp.notebook.WorkloadNotebookPlotter.analysis_to_loader`. The loader functions can be called manually if needed but it should not be necessary.
+
+#### Manually loading the metrics
+
+The analysis pqts generated by `workload-processor process` in `analysis/` can be manually loaded using `wp.notebook.WorkloadNotebookAnalysis.load_combined_analysis` as shown below.
 The function will take a filename, then go across every directory in `gb5.benchmark_dirs`, collect the file from its `analysis/` directory and concat them into one.
-Unless `trim_path=False` is passed it will also automatically trim the `wa_path` column to only contain the tag instead of the full directory name.
-Optionally the function also takes `preprocess` and `postprocess` function arguments.
-The former will be applied onto each workload analysis dataframe before they're all concatenated into one.
-The latter will be applied onto the resulting concatenated dataframe.
-The function will automatically add the final dataframe to `gb5.analysis` using the part before `.` in `name` as the key.
-E.g. in the below example the resulting dataframe can be found in `gb5.analysis['overutilized']`.
+In the below example the resulting dataframe can be found in `gb5.analysis['overutilized']`.
 
 
 ```

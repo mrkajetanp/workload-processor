@@ -24,7 +24,7 @@ jobs:
           python-version: '3.11'
 
       - run: pip install .
-      - run: pdoc ./wp -o docs/
+      - run: pdoc ./wp -t doc -o docs/
 
       - uses: actions/upload-pages-artifact@v2
         with:

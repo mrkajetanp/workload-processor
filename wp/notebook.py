@@ -1,3 +1,6 @@
+"""Notebook analysis module. Intended to be used inside a Jupyter notebook on workload runs processed with
+`wp.processor`."""
+
 import os
 import pandas as pd
 import polars as pl
@@ -6,7 +9,10 @@ import logging as log
 import confuse
 import shutil
 import functools
+import plotly
+import lisa
 
+from typing import Dict, List, Callable
 from tabulate import tabulate
 from functools import lru_cache, cached_property
 
@@ -79,22 +85,52 @@ def trim_wa_path(path):
 
 
 class WorkloadNotebookAnalysis:
-    def __init__(self, benchmark_path, benchmark_dirs, label=None):
-        self.benchmark_path = benchmark_path
-        self.benchmark_dirs = benchmark_dirs
+    """
+    Container class for analysis of different runs (potentially with many iterations) of a single workload.
 
-        self.wa_outputs = [WAOutput(os.path.join(benchmark_path, benchmark_dir)) for benchmark_dir in benchmark_dirs]
-        self.results = [wa_output['results'].df for wa_output in self.wa_outputs]
-        self.kernels = [
+    ```
+    gb5 = WorkloadNotebookAnalysis('/home/user/tmp/geekbench/', [
+        'geekbench_baseline_3_3101',
+        'geekbench_ufc_feec_all_cpus_3_3001',
+    ], label='Geekbench 5')
+    ```
+    """
+
+    def __init__(self, benchmark_path: str, benchmark_dirs: List[str], label: str = None):
+        """
+        Create a notebook analysis object.
+        :param benchmark_path: Absolute path to where the benchmark runs can be found.
+        :param benchmark_dirs: Directories of the benchmark runs to be included in analysis.
+        :param label: Label to display on plots. Defaults to the capitalised workload name.
+        """
+        self.benchmark_path: str = benchmark_path
+        """Absolute path to where the benchmark runs can be found."""
+        self.benchmark_dirs: List[str] = benchmark_dirs
+        """Directories of the benchmark runs to be included in analysis."""
+
+        self.wa_outputs: List[WAOutput] = [
+            WAOutput(os.path.join(benchmark_path, benchmark_dir)) for benchmark_dir in benchmark_dirs
+        ]
+        """List of `lisa.wa.WAOutput` corresponding to the runs in the analysis"""
+        self.kernels: List[str] = [
             output._jobs[os.path.basename(output.path)][0].target_info.kernel_version.release
             for output in self.wa_outputs
         ]
-        self.tags = [
+        """Kernel versions of the runs included in analysis"""
+        self.tags: List[str] = [
             trim_wa_path(os.path.basename(output.path))
             for output in self.wa_outputs
         ]
-        self.results = pd.concat(self.results)
+        """Tags of the runs included in analysis"""
+        self.label: str = self.wa_outputs[0].jobs[0].label.capitalize() if not label else label
+        """Label displayed on the plots"""
+        self.workload_label = self.wa_outputs[0].jobs[0].label
+        """Label used internally to distinguish workloads (the same as the WA  joblabel)"""
+        self.results: pd.DataFrame = pd.concat([wa_output['results'].df for wa_output in self.wa_outputs])
+        """`workload-automation` results dataframe"""
 
+        self.results_perf: pd.DataFrame = None
+        """`perf` dataframe if `perf` was enabled for the runs"""
         if not self.results.empty:
             if 'scaled from(%)' in self.results.columns:
                 self.results = self.results.drop(columns=['scaled from(%)'])
@@ -111,21 +147,32 @@ class WorkloadNotebookAnalysis:
         else:
             self.results_perf = pd.DataFrame()
 
-        self.analysis = dict()
-        self.summary = dict()
-        self.px_figures = dict()
-        self.hv_figures = dict()
+        self.analysis: Dict[str, pd.DataFrame] = dict()
+        """Loaded analysis metrics data"""
+        self.summary: Dict[str, pd.DataFrame] = dict()
+        """Summary data used by `wp.notebook.WorkloadNotebookPlotter.summary`"""
+        self.plot: WorkloadNotebookPlotter = WorkloadNotebookPlotter(self)
+        """Proxy for accessing plotting functions"""
+        self.px_figures: Dict[str, plotly.graph_objs._figure.Figure] = dict()
+        """Figures plotted using `plotly.express`"""
+        self.hv_figures: Dict = dict()
+        """Figures plotted using `holoviews`"""
 
-        self.CPUS = [str(float(x)) for x in flatten(self.config['target']['clusters'].get().values())]
-        self.CLUSTERS = list(self.config['target']['clusters'].get().keys())
-        self.CLUSTERS_TOTAL = self.CLUSTERS + ['total']
+        self.CPUS: List[str] = [str(float(x)) for x in flatten(self.config['target']['clusters'].get().values())]
+        """List of CPUs on the target device used internally. Automatically pulled from config."""
+        self.CLUSTERS: List[str] = list(self.config['target']['clusters'].get().keys())
+        """List of cluster names on the target device used internally. Automatically pulled from config."""
+        self.CLUSTERS_TOTAL: List[str] = self.CLUSTERS + ['total']
+        """List of clusters + 'total'. Used internally."""
 
-        self.label = self.wa_outputs[0].jobs[0].label.capitalize() if not label else label
-        self.workload_label = self.wa_outputs[0].jobs[0].label
-        self.plot = WorkloadNotebookPlotter(self)
+    @property
+    def config(self) -> confuse.Configuration:
+        """Config object accessor"""
+        return confuse.Configuration(APP_NAME, __name__)
 
     @cached_property
-    def plat_info(self):
+    def plat_info(self) -> PlatformInfo:
+        """Platform info of the target device if available from the config, otherwise None"""
         self.plat_info = None
         plat_info_path = os.path.expanduser(self.config['target']['plat_info'].get(str))
         if plat_info_path is not None:
@@ -133,7 +180,8 @@ class WorkloadNotebookAnalysis:
         return None
 
     @cached_property
-    def traces(self):
+    def traces(self) -> Dict[str, Dict[int, lisa.trace.Trace]]:
+        """Traces of each of the iterations in each of the runs, indexed by workload tag & iteration number"""
         trace_parquet_found = shutil.which('trace-parquet') is not None
         trace_function = wa_output_to_mock_traces if trace_parquet_found else wa_output_to_traces
 
@@ -149,11 +197,19 @@ class WorkloadNotebookAnalysis:
         print('tags:', self.tags)
         print('kernels:', self.kernels)
 
-    @property
-    def config(self):
-        return confuse.Configuration(APP_NAME, __name__)
+    def load_combined_analysis(self, name: str, allow_missing: bool = False,
+                               preprocess: Callable[[pd.DataFrame], pd.DataFrame] = lambda d: d,
+                               postprocess: Callable[[pd.DataFrame], pd.DataFrame] = None):
+        """
+        Load analysis generated by `workload-processor process` from `analysis/` into the notebook's analysis dict.
 
-    def load_combined_analysis(self, name, preprocess=lambda d: d, postprocess=None, allow_missing=False):
+        The resulting dataframe will be added as e.g. `gb5.analysis['overutilized']` using the base filename as key.
+
+        :param name: Filename of the analysis pqt
+        :param allow_missing: Replace missing data with empty dataframes instead of raising an error
+        :param preprocess: Function applied onto each analysis dataframe before they're concatenated
+        :param postprocess: Function applied onto the resulting concatenated dataframe
+        """
         def load_parquet(benchmark):
             try:
                 return preprocess(pd.read_parquet(os.path.join(self.benchmark_path, benchmark, 'analysis', name)))
@@ -290,7 +346,7 @@ class WorkloadNotebookPlotter:
     def __init__(self, notebook_analysis):
         self.ana = notebook_analysis
 
-    def _analysis_to_loader(self, analysis):
+    def analysis_to_loader(self, analysis):
         mapping = {
             'pixel6_emeter': self._load_power_meter,
             'pixel6_emeter_mean': self._load_power_meter,
@@ -334,7 +390,7 @@ class WorkloadNotebookPlotter:
             def inner(self, *args, **kwargs):
                 if any([d not in self.ana.analysis for d in names]):
                     log.debug(f'{names} not found in analysis, trying to load combined analysis')
-                    loader = self._analysis_to_loader(names[0])
+                    loader = self.analysis_to_loader(names[0])
                     loader()
 
                 if any([d not in self.ana.analysis for d in names]):
