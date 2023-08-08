@@ -5,6 +5,7 @@ import scipy as sp
 import logging as log
 import confuse
 import shutil
+import functools
 
 from tabulate import tabulate
 from functools import lru_cache, cached_property
@@ -329,6 +330,7 @@ class WorkloadNotebookPlotter:
     # TODO: detect missing and call processor?
     def requires_analysis(names):
         def wrapper(func):
+            @functools.wraps(func)
             def inner(self, *args, **kwargs):
                 if any([d not in self.ana.analysis for d in names]):
                     log.debug(f'{names} not found in analysis, trying to load combined analysis')

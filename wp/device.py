@@ -79,6 +79,7 @@ class WorkloadDevice:
         idle_governor = self.device.shell("cat /sys/devices/system/cpu/cpuidle/current_governor_ro").strip()
         log.info(f"cpuidle governor: {idle_governor}")
 
+        # TODO: use cgroups in config
         cpuset_bg = self.device.shell("cat /dev/cpuset/background/cpus").strip()
         cpuset_fg = self.device.shell("cat /dev/cpuset/foreground/cpus").strip()
         cpuset_sbg = self.device.shell("cat /dev/cpuset/system-background/cpus").strip()
