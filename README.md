@@ -204,7 +204,7 @@ Otherwise, as long as the data is loaded into the analysis it can be plotted usi
 When using the pre-defined plotting functions the relevant metrics will automatically be loaded the first time the plot is generated and the re-used. No further steps should be necessary.
 The metrics are loaded using the `wp.notebook.WorkloadNotebookPlotter.requires_analysis` decorator.
 
-To find out which metrics correspond to which private loader functions consult `wp.notebook.WorkloadNotebookPlotter.analysis_to_loader`. The loader functions can be called manually if needed but it should not be necessary.
+To obtain the loader function for a specific metric consult consult `wp.notebook.WorkloadNotebookPlotter.analysis_to_loader`. The loader functions can be called manually if needed but it should not be necessary.
 
 #### Manually loading the metrics
 

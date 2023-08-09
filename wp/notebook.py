@@ -96,7 +96,7 @@ class WorkloadNotebookAnalysis:
         self.analysis: Dict[str, pd.DataFrame] = dict()
         """Loaded analysis metrics data"""
         self.summary: Dict[str, pd.DataFrame] = dict()
-        """Summary data used by `wp.notebook.WorkloadNotebookPlotter.summary`"""
+        """Summary data used by `WorkloadNotebookPlotter.summary`"""
         self.plot: WorkloadNotebookPlotter = WorkloadNotebookPlotter(self)
         """Proxy for accessing plotting functions"""
         self.px_figures: Dict[str, plotly.graph_objs._figure.Figure] = dict()
@@ -127,7 +127,12 @@ class WorkloadNotebookAnalysis:
 
     @cached_property
     def traces(self) -> LazyMapping:
-        """Traces of each of the iterations in each of the runs, indexed by workload tag & iteration number"""
+        """
+        Traces of each of the iterations in each of the runs, indexed by workload tag & iteration number
+        ```python
+        power_event = gb6.traces['baseline'][1].df_event('pixel6_emeter')
+        ```
+        """
         trace_parquet_found = shutil.which('trace-parquet') is not None
         trace_function = wa_output_to_mock_traces if trace_parquet_found else wa_output_to_traces
 
@@ -201,10 +206,26 @@ class WorkloadNotebookAnalysis:
 
 
 class WorkloadNotebookPlotter:
-    def __init__(self, notebook_analysis):
-        self.ana = notebook_analysis
+    """
+    Container class for plotting methods that operate on data from `WorkloadNotebookAnalysis`.
+    """
+    def __init__(self, notebook_analysis: WorkloadNotebookAnalysis):
+        """
+        Create a new `WorkloadNotebookPlotter`. This will automatically be done when initialising
+        `WorkloadNotebookAnalysis` and so most likely this should not be called outside of that context.
 
-    def analysis_to_loader(self, analysis):
+        :param notebook_analysis: Notebook analysis object with the data to plot
+        """
+        self.ana: WorkloadNotebookAnalysis = notebook_analysis
+        """Handle for accessing analysis data when creating the plots"""
+
+    def analysis_to_loader(self, analysis: str) -> Callable:
+        """
+        Convert an analysis name to the loader function used for loading it. The names should match what can be
+        found in `WorkloadNotebookAnalysis.analysis` after the loader function has executed successfully.
+
+        :return: Loader function that takes no arguments and loads the requested analysis
+        """
         mapping = {
             'pixel6_emeter': self._load_power_meter,
             'pixel6_emeter_mean': self._load_power_meter,
@@ -243,6 +264,19 @@ class WorkloadNotebookPlotter:
 
     # TODO: detect missing and call processor?
     def requires_analysis(names: List[str]):
+        """
+        Decorator function used to make sure the required analysis is loaded before a plotting function is called.
+
+        Usage:
+        ```python
+        @requires_analysis(['jankbench'])
+        def jankbench_frame_durations_hist():
+            # (...)
+        ```
+
+        :param names: List of analysis metrics that are required for the plot
+
+        """
         def wrapper(func):
             @functools.wraps(func)
             def inner(self, *args, **kwargs):
@@ -260,8 +294,16 @@ class WorkloadNotebookPlotter:
 
     # -------- Results --------
 
-    def results_line(self, metrics, height=600, width=900, columns=2,
-                     title='Benchmark score per-iteration', include_label=True):
+    def results_line(self, metrics: List[str], height=600, width=900, columns=2,
+                     title='Benchmark score per-iteration', include_label=True) -> hv.Layout:
+        """
+        Plot metrics from `WorkloadNotebookAnalysis.results` per-iteration overlaid by tag with
+        the specific metrics as facet plots.
+
+        .. note:: This plot uses HoloViews. The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+
+        :param metrics: List of metrics present in the `results` df to plot
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -282,8 +324,17 @@ class WorkloadNotebookPlotter:
         self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
-    def results_bar(self, metrics, height=600, width=None, columns=2, percentage=True,
+    def results_bar(self, metrics: List[str], height=600, width=None, columns=2, percentage=True,
                     title='gmean benchmark score', include_label=True):
+        """
+        Plot gmean metrics from `WorkloadNotebookAnalysis.results` with the runs as columns and
+        the specific metrics as facet plots.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+
+        :param metrics: List of metrics present in the `results` df to plot
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -332,6 +383,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['jb_max_frame_duration'])
     def jankbench_max_frame_durations(self, height=600, width=1000, columns=2,
                                       title='Max frame durations', include_label=True):
+        """
+        Plot max frame durations collected by Jankbench as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -343,6 +400,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['jb_mean_frame_duration'])
     def jankbench_mean_frame_durations_line(self, height=600, width=1500,
                                             title='Mean frame duration per-iteration', include_label=True):
+        """
+        Plot mean frame durations collected by Jankbench as a per-iteration line plot.
+
+        .. note:: This plot uses HoloViews.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -354,11 +417,18 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
         )
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
     @requires_analysis(['jb_mean_frame_duration'])
     def jankbench_mean_frame_durations_bar(self, height=600, width=1000, percentage=True,
                                            title='gmean frame durations', include_label=True):
+        """
+        Plot gmean mean frame durations collected by Jankbench as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -370,6 +440,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['jankbench'])
     def jankbench_frame_durations_hist(self, height=800, width=None,
                                        title='Frame duration histogram', include_label=True):
+        """
+        Plot a histogram of frame durations collected by Jankbench.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -377,11 +453,18 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['jankbench'].query("variable == 'total_duration'"), x='value',
             color='tag', barmode='group', nbins=40, height=height, width=width, title=title
         )
+        self.ana.px_figures[self.ana._title_to_filename(title, "__bar")] = fig
         fig.show(renderer='iframe')
 
     @requires_analysis(['jankbench'])
     def jankbench_frame_durations_ecdf(self, height=800, width=None,
                                        title='Frame duration ecdf', include_label=True):
+        """
+        Plot an ecdf of frame durations collected by Jankbench.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -389,11 +472,17 @@ class WorkloadNotebookPlotter:
             self.ana.analysis['jankbench'].query("variable == 'total_duration'"),
             x='value', color='tag', height=height, width=width, title=title
         )
+        self.ana.px_figures[self.ana._title_to_filename(title, "__bar")] = fig
         fig.show(renderer='iframe')
 
     @requires_analysis(['jankbench_percs'])
     def jankbench_jank_percentage_line(self, height=600, width=1500,
                                        title='jank percentage per-iteration', include_label=True):
+        """
+        Plot per-iteration jank percentage collected by Jankbench.
+
+        .. note:: This plot uses HoloViews. The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -404,11 +493,18 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
         )
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
     @requires_analysis(['jankbench_percs'])
     def jankbench_jank_percentage_bar(self, height=600, width=1000, percentage=True,
                                       title='gmean jank percentage', include_label=True):
+        """
+        Plot gmean jank percentage collected by Jankbench as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -420,6 +516,11 @@ class WorkloadNotebookPlotter:
 
     def jankbench_metric_line(self, height=600, width=500, columns=3,
                               title='Metric per-iteration', include_label=True):
+        """
+        Plot per-iteration jankbench-specific metrics.
+
+        .. note:: This plot uses HoloViews. The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -432,10 +533,17 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width, axiswise=True, shared_axes=False),
         )
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
     def jankbench_jank_percentage_metric_bar(self, height=1000, width=None, columns=4, percentage=True,
                                              title='gmean jank percentage per-metric', include_label=True):
+        """
+        Plot gmean jank percentage per-metric collected by Jankbench as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -447,6 +555,12 @@ class WorkloadNotebookPlotter:
 
     def jankbench_mean_duration_metric_bar(self, height=1000, width=None, columns=4, percentage=True,
                                            title='gmean frame duration per-metric', include_label=True):
+        """
+        Plot gmean mean frame duration per-metric collected by Jankbench as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -532,8 +646,14 @@ class WorkloadNotebookPlotter:
 
     # -------- TLDR --------
 
-    def summary(self, rename_cols={}):
-        parts = []
+    def summary(self, rename_cols: Dict[str, str] = {}) -> pd.DataFrame:
+        """
+        Print the summary table containing all the relevant summary information from all the plots generated in the
+        notebook.
+
+        :param rename_cols: Mapping to optionally rename the workload tags in column headers
+        """
+        parts: List[pd.DataFrame] = []
 
         # --- Results ---
 
@@ -626,7 +746,9 @@ class WorkloadNotebookPlotter:
         summary = pd.concat(parts).reset_index(drop=True).rename(columns=rename_cols)
 
         print(self.ana.label)
-        ptable(summary)
+        print_table(summary)
+
+        return summary
 
     # -------- Power Meter (pixel6_emeter) --------
 
@@ -649,6 +771,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['pixel6_emeter_mean'])
     def power_meter_line(self, height=1000, width=None,
                          title='Mean power usage across iterations [mW]', include_label=True):
+        """
+        Plot mean power meter readings as a per-iteration line plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -658,13 +786,21 @@ class WorkloadNotebookPlotter:
         )
 
     @requires_analysis(['pixel6_emeter_mean'])
-    def power_meter_bar(self, height=600, width=None, channels=None, percentage=True,
-                        title='Gmean power usage [mW]', include_label=True):
+    def power_meter_bar(self, height=600, width=None, channels: Optional[List[str]] = None, percentage: bool = True,
+                        title: str = 'Gmean power usage [mW]', include_label: bool = True):
+        """
+        Plot gmean power meter readings as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+
+        :param channels: List of power meter channels to include in the plot
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
         data = pl.from_pandas(self.ana.analysis['pixel6_emeter_mean']).rename({'power': 'value'})
-        channels = channels if channels else data['channel'].unique()
+        channels = channels if channels else list(data['channel'].unique())
         data = data.filter(pl.col('channel').is_in(channels))
 
         self.ana.summary['power_usage'] = self.gmean_bars(
@@ -688,10 +824,16 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['overutilized', 'overutilized_mean'])
     def overutilized_line(self, height=600, width=None,
                           title='Overutilized percentage per-iteration', include_label=True):
+        """
+        Plot overutilized time percentage as a per-iteration line plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        ptable(self.ana.analysis['overutilized_mean'][['metric', 'tag', 'time', 'total_time', 'percentage']])
+        print_table(self.ana.analysis['overutilized_mean'][['metric', 'tag', 'time', 'total_time', 'percentage']])
         self.lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
 
@@ -710,6 +852,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['freqs_mean'])
     def frequency_line(self, height=600, width=None,
                        title='Mean cluster frequency across iterations', include_label=True):
+        """
+        Plot the mean cluster frequency as a per-iteration line plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -719,6 +867,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['freqs_mean'])
     def frequency_bar(self, height=600, width=None, include_label=True, percentage=True,
                       title='Gmean frequency per cluster'):
+        """
+        Plot the gmean cluster frequency as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -751,6 +905,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['thermal_melt'])
     def thermal_line(self, height=600, width=None,
                      title='Mean cluster temperature across iterations', include_label=True):
+        """
+        Plot the mean thermal zone temperature as a per-iteration bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -760,6 +920,12 @@ class WorkloadNotebookPlotter:
     @requires_analysis(['thermal_melt'])
     def thermal_bar(self, height=600, width=None, percentage=True,
                     title='Gmean temperature', include_label=True):
+        """
+        Plot the gmean thermal zone temperature as a bar plot.
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -822,7 +988,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         self.ana.summary['idle_resdiency'] = self.ana.analysis['idle_residency']
-        ptable(self.ana.analysis['idle_residency'])
+        print_table(self.ana.analysis['idle_residency'])
         fig = px.bar(
             self.ana.analysis['idle_residency'], x='idle_state', y='time', color='tag',
             facet_col='cluster', barmode='group', text=self.ana.analysis['idle_residency']['time'],
@@ -864,7 +1030,7 @@ class WorkloadNotebookPlotter:
             ['tag', 'type']
         ).sum().reset_index()[['tag', 'type', 'count_perc']]
 
-        ptable(self.ana.summary['idle_miss'])
+        print_table(self.ana.summary['idle_miss'])
         fig = px.bar(
             self.ana.analysis['cpu_idle_miss_counts'], x='type', y='count_perc', color='tag',
             facet_col='cluster', barmode='group', text=self.ana.analysis['cpu_idle_miss_counts']['count_perc'],
@@ -1046,7 +1212,7 @@ class WorkloadNotebookPlotter:
         self.ana.analysis['wakeup_latency_execution_cluster']['wakeup_latency'] = self.ana.analysis[
             'wakeup_latency_execution_cluster'
         ]['wakeup_latency'].apply(trim_number)
-        ptable(self.ana.analysis['wakeup_latency_execution_cluster'])
+        print_table(self.ana.analysis['wakeup_latency_execution_cluster'])
         fig.show(renderer='iframe')
 
     @requires_analysis(['wakeup_latency_target_cluster'])
@@ -1064,7 +1230,7 @@ class WorkloadNotebookPlotter:
         self.ana.analysis['wakeup_latency_target_cluster']['wakeup_latency'] = self.ana.analysis[
             'wakeup_latency_target_cluster'
         ]['wakeup_latency'].apply(trim_number)
-        ptable(self.ana.analysis['wakeup_latency_target_cluster'])
+        print_table(self.ana.analysis['wakeup_latency_target_cluster'])
         fig.show(renderer='iframe')
 
     # -------- Wakeup latency - cgroup --------
@@ -1288,7 +1454,7 @@ class WorkloadNotebookPlotter:
             percentage=percentage
         )
 
-    # -------- Taks placement (activations) --------
+    # -------- Task placement (activations) --------
 
     def _load_task_activations_stats(self):
         # select all tasks specified in the config by default
@@ -1367,7 +1533,17 @@ class WorkloadNotebookPlotter:
             height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
         )
 
-    def task_activations_detailed(self, tag_a, tag_b, iteration, comm, columns=1, include_label=True):
+    def task_activations_detailed(self, tag_a: str, tag_b: str, iteration: int, comm: str, columns: int = 1,
+                                  include_label: bool = True):
+        """
+        Plot detailed task activations in kernelshark-style from `tag_a` and `tag_b` in one layout.
+
+        :param tag_a: The first workload tag to plot data from
+        :param tag_b: The second workload tag to plot data from
+        :param iteration: Iteration to plot data from
+        :param comm: Comm of the task to plot data from
+        :param columns: Number of columns to display the two plots in
+        """
         title = f'{comm} activations in iteration {iteration}'
         if include_label:
             title = f"{self.ana.label} - {title}"
@@ -1393,8 +1569,13 @@ class WorkloadNotebookPlotter:
         log.info('Loaded uclamp_updates into analysis')
 
     @requires_analysis(['uclamp_updates'])
-    def uclamp_per_task_line(self, tasks=None, height=600, width=1600, include_label=True,
+    def uclamp_per_task_line(self, height=600, width=1600, include_label=True,
                              title='Per-task uclamp over time'):
+        """
+        Plot the uclamp updates for each task across iterations.
+
+        .. note:: This plot uses HoloViews. The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+        """
         if include_label:
             title = f"{self.ana.label} - {title}"
 
@@ -1408,6 +1589,7 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 
     # -------- helper functions --------
@@ -1520,7 +1702,7 @@ class WorkloadNotebookPlotter:
         data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
         if table_sort is not None:
             data_table = data_table.sort_values(by=table_sort)
-        ptable(data_table)
+        print_table(data_table)
 
         # prepare the plot labels
         plot_text = format_percentage(
@@ -1614,7 +1796,7 @@ def format_percentage(vals, perc, pvals, pval_threshold=0.02):
     return result['value']
 
 
-def ptable(df):
+def print_table(df):
     print(tabulate(df, headers='keys', tablefmt='pretty', showindex=False, floatfmt=".3f"))
 
 
