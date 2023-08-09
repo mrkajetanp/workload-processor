@@ -10,9 +10,8 @@ import confuse
 import shutil
 import functools
 import plotly
-import lisa
 
-from typing import Dict, List, Callable
+from typing import Dict, List, Callable, Optional
 from tabulate import tabulate
 from functools import lru_cache, cached_property
 
@@ -43,7 +42,7 @@ class WorkloadNotebookAnalysis:
     ```
     """
 
-    def __init__(self, benchmark_path: str, benchmark_dirs: List[str], label: str = None):
+    def __init__(self, benchmark_path: str, benchmark_dirs: List[str], label: Optional[str] = None):
         """
         Create a notebook analysis object.
         :param benchmark_path: Absolute path to where the benchmark runs can be found.
@@ -127,14 +126,14 @@ class WorkloadNotebookAnalysis:
         return None
 
     @cached_property
-    def traces(self) -> Dict[str, Dict[int, lisa.trace.Trace]]:
+    def traces(self) -> LazyMapping:
         """Traces of each of the iterations in each of the runs, indexed by workload tag & iteration number"""
         trace_parquet_found = shutil.which('trace-parquet') is not None
         trace_function = wa_output_to_mock_traces if trace_parquet_found else wa_output_to_traces
 
         return LazyMapping({
             trim_wa_path(os.path.basename(wa_output.path)): lru_cache()(
-                lambda k: trace_function(wa_output, self.plat_info)
+                lambda _: trace_function(wa_output, self.plat_info)
             ) for wa_output in self.wa_outputs
         })
 
@@ -173,162 +172,6 @@ class WorkloadNotebookAnalysis:
         if postprocess is not None:
             result = postprocess(result)
         self.analysis[name.split('.')[0]] = result
-
-    def plot_gmean_bars(self, df: pd.DataFrame, x: str = 'stat', y: str = 'value', color: str = 'tag',
-                        facet_col: str = 'metric', facet_col_wrap: int = 3, title: str = 'Gmean values',
-                        width: int = None, height: int = 600, gmean_round: int = 1,
-                        include_columns: List[str] = [], table_sort: List[str] = None,
-                        order_cluster: bool = False, sort_ascending: bool = False, include_total: bool = False,
-                        debug: bool = False, percentage: bool = True) -> pd.DataFrame:
-        """
-        Plot gmean values of some metric with statistical analysis attached.
-        It's mainly intended as a way of comparing multiple iterations across workloads and so
-        it expects a melt-like (`pd.melt`) dataframe to plot.
-
-        The function heavily relies on multiple assumptions about the underlying dataframe so it might break if those
-        are not met.
-
-        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `self.px_figures`.
-
-        :param df: Dataframe with the data to plot
-        :param x: Column denoting the x axis
-        :param y: Column denoting the y axis
-        :param color: Column denoting how to split the data into bars
-        :param facet_col: Column denoting how to split the plot into facets
-        :param facet_col_wrap: Number of facet column in one row of the plot
-        :param title: Displayed title of the plot
-        :param width: Plot width
-        :param height: Plot height
-        :param gmean_round: Number of decimal places to round the gmeans to
-        :param include_columns: Other columns to include in the resulting data table
-        :param table_sort: List of columns to sort the data table by
-        :param order_cluster: Order the plot by CPU clusters
-        :param sort_ascending: Order the plot by ascending values
-        :param include_total: Include the 'total' column alongside the clusters
-        :param debug: Insert a pdb breakpoint before computing the dataframes
-        :param percentage: Include percentage differences and check pvalues
-
-        :return: Dataframe of the ASCII table that will be printed above the resulting plot.
-
-        The resulting dataframe can be included in the summary dict for later use as shown below.
-        ```python
-        gb5.summary['scores'] = gb5.plot_gmean_bars(
-            gb5.results, x='stat', y='value', facet_col='metric', facet_col_wrap=3,
-            title='gmean benchmark score', width=1600, height=600
-        )
-        ```
-
-        """
-
-        shown_clusters = self.CLUSTERS if not include_total else self.CLUSTERS_TOTAL
-        if 'unit' not in df.columns:
-            df['unit'] = 'x'
-        if 'metric' not in df.columns:
-            df['metric'] = 'gmean'
-
-        if debug:
-            import pdb
-            pdb.set_trace()
-
-        # prepare the sort list
-        sort_list = ['metric']
-        if order_cluster:
-            sort_list.append('order_cluster')
-        sort_list.append('order_kernel')
-
-        if percentage and len(self.tags) < 2:
-            log.error("Can't compute percentage differences from less than 2 runs")
-            percentage = False
-
-        # prepare percentage differences & pvalues
-        if percentage:
-            # compute percentage differences
-            stats_perc = Stats(df, ref_group={'tag': self.tags[0]}, value_col=y,
-                               agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
-            # re-add stub tag
-            stats_perc_vals_temp = stats_perc.query(f"tag == '{self.tags[1]}'")
-            stats_perc_vals_temp['tag'] = self.tags[0]
-            stats_perc_vals_temp['value'] = 0
-            # re-combine a df with percentage differences
-            stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
-            stats_perc_vals['order_kernel'] = stats_perc_vals['tag'].map(lambda x: self.tags.index(x))
-
-            if order_cluster:
-                stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
-            # split into dfs with percentages and pvalues
-            stats_perc_pvals = stats_perc_vals.query("stat == 'ks2samp_test'").sort_values(
-                by=sort_list
-            ).reset_index(drop=True)
-            stats_perc_vals = stats_perc_vals.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
-
-        # compute absolute gmeans
-        gmeans = Stats(df, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}).df
-        if gmean_round > 0:
-            gmeans['value'] = round(gmeans['value'], gmean_round)
-        gmeans['order_kernel'] = gmeans['tag'].map(lambda x: self.tags.index(x))
-
-        if order_cluster:
-            gmeans['order_cluster'] = gmeans['cluster'].map(lambda x: shown_clusters.index(x))
-
-        gmeans_mean = gmeans.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
-
-        # prepare the data table
-        data_table = gmeans_mean[[
-            col for col in gmeans_mean.columns
-            if col in (['tag', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'] + include_columns)
-        ]]
-        if percentage:
-            data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
-        data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
-        if table_sort is not None:
-            data_table = data_table.sort_values(by=table_sort)
-        ptable(data_table)
-
-        # prepare the plot labels
-        plot_text = format_percentage(
-            gmeans_mean['value'], stats_perc_vals['value'], stats_perc_pvals['value']
-        ) if percentage else gmeans_mean['value']
-
-        # plot bars
-        fig = px.bar(gmeans_mean, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
-                     barmode='group', title=title, width=width, height=height,
-                     text=plot_text)
-        fig.update_traces(textposition='outside')
-        fig.update_yaxes(matches=None)
-        if sort_ascending:
-            fig.update_xaxes(categoryorder='total ascending')
-        self.px_figures[self._title_to_filename(title, "__bar")] = fig
-        fig.show(renderer='iframe')
-
-        return data_table
-
-    def plot_lines_px(self, df: pd.DataFrame, x: str = 'iteration', y: str = 'value',
-                      color: str = 'tag', facet_col: str = None, facet_col_wrap: int = 2,
-                      height: int = 600, width: int = None, title: str = None,
-                      scale_y: bool = False, renderer: str = 'iframe'):
-        """
-        Plot lines of some metric, e.g across iterations.
-
-        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `self.px_figures`.
-
-        :param df: Dataframe with the data to plot
-        :param x: Column denoting the x axis
-        :param y: Column denoting the y axis
-        :param color: Column denoting how to split the data into lines
-        :param facet_col: Column denoting how to split the plot into facets
-        :param facet_col_wrap: Number of facet column in one row of the plot
-        :param title: Displayed title of the plot
-        :param width: Plot width
-        :param height: Plot height
-        :param scale_y: Whether the y axis should maintain the same scale across facets
-        :param renderer: Plotly express renderer to be used
-        """
-        fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
-                      height=height, width=width, title=title)
-        if not scale_y:
-            fig.update_yaxes(matches=None)
-        self.px_figures[self._title_to_filename(title, "__line")] = fig
-        fig.show(renderer=renderer)
 
     def _title_to_filename(self, title, suffix):
         return "".join([lt for lt in title.lower() if lt.isalnum() or lt == ' ']).replace(' ', '_').replace(
@@ -399,7 +242,7 @@ class WorkloadNotebookPlotter:
         return mapping[analysis]
 
     # TODO: detect missing and call processor?
-    def requires_analysis(names):
+    def requires_analysis(names: List[str]):
         def wrapper(func):
             @functools.wraps(func)
             def inner(self, *args, **kwargs):
@@ -448,7 +291,7 @@ class WorkloadNotebookPlotter:
             pl.col('metric').is_in(metrics)
         ).to_pandas()
 
-        self.ana.summary['results'] = self.ana.plot_gmean_bars(
+        self.ana.summary['results'] = self.gmean_bars(
             data, x='stat', y='value', facet_col='metric', percentage=percentage,
             facet_col_wrap=columns, title=title, width=width, height=height
         )
@@ -492,7 +335,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['jb_max_frame_duration'] = self.ana.plot_gmean_bars(
+        self.ana.summary['jb_max_frame_duration'] = self.gmean_bars(
             self.ana.analysis['jb_max_frame_duration'], x='variable', y='value',
             title=title, width=width, height=height
         )
@@ -519,7 +362,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['jb_mean_frame_duration'] = self.ana.plot_gmean_bars(
+        self.ana.summary['jb_mean_frame_duration'] = self.gmean_bars(
             self.ana.analysis['jb_mean_frame_duration'], x='variable', y='value',
             title=title, width=width, height=height, percentage=percentage,
         )
@@ -569,7 +412,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['jankbench_percs'] = self.ana.plot_gmean_bars(
+        self.ana.summary['jankbench_percs'] = self.gmean_bars(
             self.ana.analysis['jankbench_percs'].rename(columns={'perc': 'value'})[
                 ['tag', 'iteration', 'value', 'variable']
             ], x='variable', y='value', title=title, width=width, height=height, percentage=percentage
@@ -596,7 +439,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_gmean_bars(
+        self.gmean_bars(
             self.ana.results.query("metric == 'jank_p'"),
             x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
             title=title, width=width, height=height, percentage=percentage
@@ -607,7 +450,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_gmean_bars(
+        self.gmean_bars(
             self.ana.results.query("metric == 'mean'"),
             x='stat', y='value', facet_col='test_name', facet_col_wrap=columns,
             title=title, width=width, height=height, percentage=percentage
@@ -653,7 +496,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['adpf_totals_melt'], facet_col='variable', title=title,
             height=height, width=width
         )
@@ -664,7 +507,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['drarm_adpf_fps'] = self.ana.plot_gmean_bars(
+        self.ana.summary['drarm_adpf_fps'] = self.gmean_bars(
             self.ana.analysis['adpf_totals_melt'], x='metric', y='value', facet_col='variable',
             facet_col_wrap=5, title=title, height=height, width=width, include_columns=['variable'],
             table_sort=['variable', 'tag'], percentage=percentage
@@ -809,7 +652,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['pixel6_emeter_mean'], y='power', facet_col='channel',
             facet_col_wrap=3, height=height, width=width, title=title
         )
@@ -824,7 +667,7 @@ class WorkloadNotebookPlotter:
         channels = channels if channels else data['channel'].unique()
         data = data.filter(pl.col('channel').is_in(channels))
 
-        self.ana.summary['power_usage'] = self.ana.plot_gmean_bars(
+        self.ana.summary['power_usage'] = self.gmean_bars(
             data.to_pandas(), x='channel', y='value', facet_col='metric', facet_col_wrap=5, percentage=percentage,
             title=title, height=height, width=width, include_total=True, include_columns=['channel']
         )
@@ -849,7 +692,7 @@ class WorkloadNotebookPlotter:
             title = f"{self.ana.label} - {title}"
 
         ptable(self.ana.analysis['overutilized_mean'][['metric', 'tag', 'time', 'total_time', 'percentage']])
-        self.ana.plot_lines_px(self.ana.analysis['overutilized'], y='percentage',
+        self.lines_px(self.ana.analysis['overutilized'], y='percentage',
                                title=title, height=height, width=width)
 
     # -------- Frequency --------
@@ -870,7 +713,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(self.ana.analysis['freqs_mean'], facet_col='cluster',
+        self.lines_px(self.ana.analysis['freqs_mean'], facet_col='cluster',
                                facet_col_wrap=3, title=title, height=height, width=width)
 
     @requires_analysis(['freqs_mean'])
@@ -879,7 +722,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['frequency'] = self.ana.plot_gmean_bars(
+        self.ana.summary['frequency'] = self.gmean_bars(
             self.ana.analysis['freqs_mean'], x='metric', y='value', facet_col='cluster', facet_col_wrap=3,
             title=title, width=width, height=height, order_cluster=True, percentage=percentage,
             include_columns=['cluster']
@@ -911,7 +754,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(self.ana.analysis['thermal_melt'], facet_col='cluster', height=height, width=width,
+        self.lines_px(self.ana.analysis['thermal_melt'], facet_col='cluster', height=height, width=width,
                                facet_col_wrap=3, title=title)
 
     @requires_analysis(['thermal_melt'])
@@ -920,7 +763,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['thermal'] = self.ana.plot_gmean_bars(
+        self.ana.summary['thermal'] = self.gmean_bars(
             self.ana.analysis['thermal_melt'], x='cluster', y='value',
             facet_col='metric', facet_col_wrap=2, title=title,
             width=width, height=height, order_cluster=True, include_columns=['cluster'], percentage=percentage
@@ -957,7 +800,7 @@ class WorkloadNotebookPlotter:
         if not counters:
             counters = self.ana.config['notebook']['perf_counters'].get()
 
-        self.ana.plot_gmean_bars(
+        self.gmean_bars(
             self.ana.results_perf.query("metric in @counters")[['kernel', 'tag', 'iteration', 'metric', 'value']],
             x='stat', y='value', facet_col='metric', facet_col_wrap=5, title=title, width=width, height=height,
             percentage=percentage
@@ -1046,7 +889,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['energy_estimate_melt'], facet_col='cluster',
             height=height, width=width, title=title
         )
@@ -1057,7 +900,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['energy_estimate'] = self.ana.plot_gmean_bars(
+        self.ana.summary['energy_estimate'] = self.gmean_bars(
             self.ana.analysis['energy_estimate_melt'], x='cluster', y='value', facet_col='metric',
             facet_col_wrap=5, title=title, width=width, height=height,
             include_columns=['cluster'], order_cluster=True, include_total=True, percentage=percentage
@@ -1104,7 +947,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['cfs_signals'] = self.ana.plot_gmean_bars(
+        self.ana.summary['cfs_signals'] = self.gmean_bars(
             self.ana.analysis['sched_pelt_cfs_melt'], x='cluster', y='value',
             facet_col='variable', facet_col_wrap=1, title=title, percentage=percentage,
             width=width, height=height, order_cluster=True, include_columns=['cluster'],
@@ -1160,7 +1003,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['wakeup_latency_mean'], facet_col='comm',
             facet_col_wrap=columns, height=height, width=width, title=title
         )
@@ -1171,7 +1014,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['wakeup_latency'] = self.ana.plot_gmean_bars(
+        self.ana.summary['wakeup_latency'] = self.gmean_bars(
             self.ana.analysis['wakeup_latency_mean'], x='metric', y='value', facet_col='comm', facet_col_wrap=columns,
             title=title, table_sort=['comm', 'tag'], gmean_round=0, width=width, height=height, percentage=percentage
         )
@@ -1182,7 +1025,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['wakeup_latency_quantiles'] = self.ana.plot_gmean_bars(
+        self.ana.summary['wakeup_latency_quantiles'] = self.gmean_bars(
             self.ana.analysis['wakeup_latency_quantiles'].rename(columns={'wakeup_latency': 'value'}),
             x='quantile', y='value', facet_col='comm', facet_col_wrap=columns, title=title, percentage=percentage,
             width=width, height=height, include_columns=['quantile'], table_sort=['quantile', 'comm'], gmean_round=0,
@@ -1255,7 +1098,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['wakeup_latency_cgroup_mean'], facet_col='cgroup', facet_col_wrap=3,
             height=height, width=width, title=title
         )
@@ -1266,7 +1109,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['wakeup_latency_cgroup'] = self.ana.plot_gmean_bars(
+        self.ana.summary['wakeup_latency_cgroup'] = self.gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_mean'], x='metric', y='value', facet_col='cgroup',
             title=title, include_columns=['cgroup'], table_sort=['cgroup'], gmean_round=0, width=width, height=height,
             percentage=percentage
@@ -1278,7 +1121,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['wakeup_latency_cgroup_quantiles'] = self.ana.plot_gmean_bars(
+        self.ana.summary['wakeup_latency_cgroup_quantiles'] = self.gmean_bars(
             self.ana.analysis['wakeup_latency_cgroup_quantiles'], x='quantile', y='value', facet_col='cgroup',
             facet_col_wrap=1, title=title, include_columns=['cgroup', 'quantile'], percentage=percentage,
             table_sort=['quantile', 'cgroup'], width=width, height=height, gmean_round=0
@@ -1354,7 +1197,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.plot_lines_px(
+        self.lines_px(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], facet_col='cluster',
             title=title, height=height, width=width, facet_col_wrap=columns
         )
@@ -1365,7 +1208,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['tasks_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
+        self.ana.summary['tasks_cpu_residency_cluster'] = self.gmean_bars(
             self.ana.analysis['tasks_residency_cpu_total_cluster_melt'], x='cluster', y='value', facet_col='metric',
             facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height, width=width,
             order_cluster=True, include_total=True, percentage=percentage
@@ -1377,7 +1220,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['tasks_cpu_residency_per_task'] = self.ana.plot_gmean_bars(
+        self.ana.summary['tasks_cpu_residency_per_task'] = self.gmean_bars(
             self.ana.analysis['tasks_residency_total_cluster_melt'], x='cluster', y='value', facet_col='comm',
             facet_col_wrap=columns, title=title, include_columns=['cluster'], height=height,
             width=width, order_cluster=True, include_total=True, percentage=percentage
@@ -1390,7 +1233,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['tasks_cpu_residency_cpus'] = self.ana.plot_gmean_bars(
+        self.ana.summary['tasks_cpu_residency_cpus'] = self.gmean_bars(
             self.ana.analysis['tasks_residency_total_melt'], x='cpu', y='value', facet_col='comm',
             facet_col_wrap=columns, title=title, width=width, height=height, percentage=percentage
         )
@@ -1426,7 +1269,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['cgroup_cpu_residency_cluster'] = self.ana.plot_gmean_bars(
+        self.ana.summary['cgroup_cpu_residency_cluster'] = self.gmean_bars(
             self.ana.analysis['cgroup_residency_total_cluster_melt'], x='cluster', y='value', facet_col='cgroup',
             facet_col_wrap=1, title=title, width=width, height=height,
             include_columns=['cgroup', 'cluster'], table_sort=['cgroup', 'cluster'],
@@ -1439,7 +1282,7 @@ class WorkloadNotebookPlotter:
         if include_label:
             title = f"{self.ana.label} - {title}"
 
-        self.ana.summary['cgroup_cpu_residency_cpu'] = self.ana.plot_gmean_bars(
+        self.ana.summary['cgroup_cpu_residency_cpu'] = self.gmean_bars(
             self.ana.analysis['cgroup_residency_total_melt'], x='cpu', y='value', facet_col='cgroup',
             facet_col_wrap=1, title='', width=width, height=height, include_columns=['cgroup', 'cpu'],
             percentage=percentage
@@ -1469,7 +1312,7 @@ class WorkloadNotebookPlotter:
         data = self.ana.analysis['task_activations_stats_cluster'].query("comm in @tasks")
 
         for task, task_df in data.groupby('comm'):
-            self.ana.plot_lines_px(
+            self.lines_px(
                 task_df, x='iteration', y='count', color='tag', facet_col='cluster',
                 facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
             )
@@ -1485,7 +1328,7 @@ class WorkloadNotebookPlotter:
         data = self.ana.analysis['task_activations_stats_cluster'].query("comm in @tasks")
 
         for task, task_df in data.groupby('comm'):
-            self.ana.plot_lines_px(
+            self.lines_px(
                 task_df, x='iteration', y='count', color='tag', facet_col='cluster',
                 facet_col_wrap=3, height=height, width=width, scale_y=True, title=title.format(task)
             )
@@ -1502,7 +1345,7 @@ class WorkloadNotebookPlotter:
             "comm in @tasks and variable == 'count'"
         ).reset_index(drop=True)
 
-        self.ana.summary['activations_stats_count'] = self.ana.plot_gmean_bars(
+        self.ana.summary['activations_stats_count'] = self.gmean_bars(
             data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title, percentage=False,
             height=height, width=width, include_columns=['cluster'], order_cluster=True,
         )
@@ -1519,7 +1362,7 @@ class WorkloadNotebookPlotter:
             "comm in @tasks and variable == 'duration'"
         ).reset_index(drop=True)
 
-        self.ana.summary['activations_stats_duration'] = self.ana.plot_gmean_bars(
+        self.ana.summary['activations_stats_duration'] = self.gmean_bars(
             data, x='cluster', facet_col='comm', facet_col_wrap=3, title=title,
             height=height, width=width, include_columns=['cluster'], order_cluster=True, percentage=False
         )
@@ -1566,6 +1409,164 @@ class WorkloadNotebookPlotter:
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
         return layout
+
+    # -------- helper functions --------
+
+    def gmean_bars(self, df: pd.DataFrame, x: str = 'stat', y: str = 'value', color: str = 'tag',
+                   facet_col: str = 'metric', facet_col_wrap: int = 3, title: str = 'Gmean values',
+                   width: Optional[int] = None, height: int = 600, gmean_round: int = 1,
+                   include_columns: List[str] = [], table_sort: Optional[List[str]] = None,
+                   order_cluster: bool = False, sort_ascending: bool = False, include_total: bool = False,
+                   debug: bool = False, percentage: bool = True) -> pd.DataFrame:
+        """
+        Plot gmean values of some metric with statistical analysis attached.
+        It's mainly intended as a way of comparing multiple iterations across workloads and so
+        it expects a melt-like (`pd.melt`) dataframe to plot.
+
+        The function heavily relies on multiple assumptions about the underlying dataframe so it might break if those
+        are not met.
+
+        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `px_figures`.
+
+        :param df: Dataframe with the data to plot
+        :param x: Column denoting the x axis
+        :param y: Column denoting the y axis
+        :param color: Column denoting how to split the data into bars
+        :param facet_col: Column denoting how to split the plot into facets
+        :param facet_col_wrap: Number of facet column in one row of the plot
+        :param title: Displayed title of the plot
+        :param width: Plot width
+        :param height: Plot height
+        :param gmean_round: Number of decimal places to round the gmeans to
+        :param include_columns: Other columns to include in the resulting data table
+        :param table_sort: List of columns to sort the data table by
+        :param order_cluster: Order the plot by CPU clusters
+        :param sort_ascending: Order the plot by ascending values
+        :param include_total: Include the 'total' column alongside the clusters
+        :param debug: Insert a pdb breakpoint before computing the dataframes
+        :param percentage: Include percentage differences and check pvalues
+
+        :return: Dataframe of the ASCII table that will be printed above the resulting plot.
+
+        The resulting dataframe can be included in the summary dict for later use as shown below.
+        ```python
+        gb5.summary['scores'] = gb5.plot.gmean_bars(
+            gb5.results, x='stat', y='value', facet_col='metric', facet_col_wrap=3,
+            title='gmean benchmark score', width=1600, height=600
+        )
+        ```
+
+        """
+
+        shown_clusters = self.ana.CLUSTERS if not include_total else self.ana.CLUSTERS_TOTAL
+        if 'unit' not in df.columns:
+            df['unit'] = 'x'
+        if 'metric' not in df.columns:
+            df['metric'] = 'gmean'
+
+        if debug:
+            import pdb
+            pdb.set_trace()
+
+        # prepare the sort list
+        sort_list = ['metric']
+        if order_cluster:
+            sort_list.append('order_cluster')
+        sort_list.append('order_kernel')
+
+        if percentage and len(self.ana.tags) < 2:
+            log.error("Can't compute percentage differences from less than 2 runs")
+            percentage = False
+
+        # prepare percentage differences & pvalues
+        if percentage:
+            # compute percentage differences
+            stats_perc = Stats(df, ref_group={'tag': self.ana.tags[0]}, value_col=y,
+                               agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
+            # re-add stub tag
+            stats_perc_vals_temp = stats_perc.query(f"tag == '{self.ana.tags[1]}'")
+            stats_perc_vals_temp['tag'] = self.ana.tags[0]
+            stats_perc_vals_temp['value'] = 0
+            # re-combine a df with percentage differences
+            stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
+            stats_perc_vals['order_kernel'] = stats_perc_vals['tag'].map(lambda x: self.ana.tags.index(x))
+
+            if order_cluster:
+                stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
+            # split into dfs with percentages and pvalues
+            stats_perc_pvals = stats_perc_vals.query("stat == 'ks2samp_test'").sort_values(
+                by=sort_list
+            ).reset_index(drop=True)
+            stats_perc_vals = stats_perc_vals.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
+
+        # compute absolute gmeans
+        gmeans = Stats(df, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}).df
+        if gmean_round > 0:
+            gmeans['value'] = round(gmeans['value'], gmean_round)
+        gmeans['order_kernel'] = gmeans['tag'].map(lambda x: self.ana.tags.index(x))
+
+        if order_cluster:
+            gmeans['order_cluster'] = gmeans['cluster'].map(lambda x: shown_clusters.index(x))
+
+        gmeans_mean = gmeans.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
+
+        # prepare the data table
+        data_table = gmeans_mean[[
+            col for col in gmeans_mean.columns
+            if col in (['tag', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'] + include_columns)
+        ]]
+        if percentage:
+            data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
+        data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
+        if table_sort is not None:
+            data_table = data_table.sort_values(by=table_sort)
+        ptable(data_table)
+
+        # prepare the plot labels
+        plot_text = format_percentage(
+            gmeans_mean['value'], stats_perc_vals['value'], stats_perc_pvals['value']
+        ) if percentage else gmeans_mean['value']
+
+        # plot bars
+        fig = px.bar(gmeans_mean, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
+                     barmode='group', title=title, width=width, height=height,
+                     text=plot_text)
+        fig.update_traces(textposition='outside')
+        fig.update_yaxes(matches=None)
+        if sort_ascending:
+            fig.update_xaxes(categoryorder='total ascending')
+        self.ana.px_figures[self.ana._title_to_filename(title, "__bar")] = fig
+        fig.show(renderer='iframe')
+
+        return data_table
+
+    def lines_px(self, df: pd.DataFrame, x: str = 'iteration', y: str = 'value',
+                 color: str = 'tag', facet_col: Optional[str] = None, facet_col_wrap: int = 2,
+                 height: int = 600, width: Optional[int] = None, title: Optional[str] = None,
+                 scale_y: bool = False, renderer: str = 'iframe'):
+        """
+        Plot lines of some metric, e.g across iterations.
+
+        .. note:: This function has side-effects. The figure of the resulting plot will be saved to `px_figures`.
+
+        :param df: Dataframe with the data to plot
+        :param x: Column denoting the x axis
+        :param y: Column denoting the y axis
+        :param color: Column denoting how to split the data into lines
+        :param facet_col: Column denoting how to split the plot into facets
+        :param facet_col_wrap: Number of facet column in one row of the plot
+        :param title: Displayed title of the plot
+        :param width: Plot width
+        :param height: Plot height
+        :param scale_y: Whether the y axis should maintain the same scale across facets
+        :param renderer: Plotly express renderer to be used
+        """
+        fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
+                      height=height, width=width, title=title)
+        if not scale_y:
+            fig.update_yaxes(matches=None)
+        self.ana.px_figures[self.ana._title_to_filename(title, "__line")] = fig
+        fig.show(renderer=renderer)
 
 
 def setup_notebook():
