@@ -1,4 +1,3 @@
-import os
 import argparse
 import logging as log
 import confuse

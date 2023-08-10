@@ -74,31 +74,15 @@ class WorkloadProcessor:
         self.label = self.wa_output.jobs[0].label
 
     def run_metrics(self, metrics):
-        METRIC_TO_ANALYSIS = {
-            'power': self.trace_pixel6_emeter_analysis,
-            'idle': self.trace_cpu_idle_analysis,
-            'idle-miss': self.trace_cpu_idle_miss_analysis,
-            'freq': self.trace_frequency_analysis,
-            'overutil': self.trace_overutilized_analysis,
-            'pelt': self.trace_sched_pelt_cfs_analysis,
-            'capacity': self.trace_capacity_analysis,
-            'tasks-residency': self.trace_tasks_residency_time_analysis,
-            'tasks-activations': self.trace_tasks_activations_analysis,
-            'adpf': self.adpf_analysis,
-            'thermal': self.thermal_analysis,
-            'perf-trace-event': self.trace_perf_event_analysis,
-            'uclamp': self.trace_uclamp_analysis,
-            'energy-estimate': self.trace_energy_estimate_analysis,
-            'cgroup-attach': self.trace_cgroup_attach_task_analysis,
-            'wakeup-latency': self.trace_wakeup_latency_analysis,
-            'wakeup-latency-cgroup': self.trace_wakeup_latency_cgroup_analysis,
-            'tasks-residency-cgroup': self.trace_tasks_residency_cgroup_analysis,
-        }
+        # Analysis functions need to follow the pattern of being called the same as the corresponding metrics
+        # With '-' replaced by '_' and with the suffix `_analysis`.
+        def metric_to_analysis(metric: str):
+            return getattr(self, f"{metric.replace('-', '_')}_analysis")
 
         for metric in metrics:
             try:
                 analysis_start = time.time()
-                METRIC_TO_ANALYSIS[metric]()
+                metric_to_analysis(metric)()
                 log.debug(f"{metric} analysis complete, took {round(time.time() - analysis_start, 2)}s")
             except (MissingTraceEventError, HostError, WPMetricFailedError) as e:
                 log.error(e)
@@ -151,7 +135,7 @@ class WorkloadProcessor:
             trace.start
         log.info('Traces validated successfully')
 
-    def trace_pixel6_emeter_analysis(self):
+    def power_analysis(self):
         log.info('Collecting data from pixel6_emeter')
         power = self.analysis.apply(self.analysis.trace_pixel6_emeter_df)
         power.write_parquet(os.path.join(self.analysis_path, 'pixel6_emeter.pqt'))
@@ -160,7 +144,7 @@ class WorkloadProcessor:
         power_mean.write_parquet(os.path.join(self.analysis_path, 'pixel6_emeter_mean.pqt'))
         print(power_mean)
 
-    def trace_energy_estimate_analysis(self):
+    def energy_estimate_analysis(self):
         log.info('Computing energy estimates')
         df = self.analysis.apply(self.analysis.trace_energy_estimate_df)
         df.write_parquet(os.path.join(self.analysis_path, 'energy_estimate.pqt'))
@@ -172,7 +156,7 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'energy_estimate_mean.pqt'))
         print(df)
 
-    def trace_cpu_idle_analysis(self):
+    def idle_analysis(self):
         log.info('Collecting cpu_idle events')
         idle = self.analysis.apply(self.analysis.trace_cpu_idle_df)
         idle.write_parquet(os.path.join(self.analysis_path, 'cpu_idle.pqt'))
@@ -183,7 +167,7 @@ class WorkloadProcessor:
         idle_res.write_parquet(os.path.join(self.analysis_path, 'idle_residency.pqt'))
         print(idle_res)
 
-    def trace_cpu_idle_miss_analysis(self):
+    def idle_miss_analysis(self):
         log.info('Collecting cpu_idle_miss events')
         idle_miss = self.analysis.apply(self.analysis.trace_cpu_idle_miss_df)
 
@@ -196,7 +180,7 @@ class WorkloadProcessor:
         idle_miss.write_parquet(os.path.join(self.analysis_path, 'cpu_idle_miss_counts.pqt'))
         print(idle_miss)
 
-    def trace_frequency_analysis(self):
+    def freq_analysis(self):
         log.info('Collecting frequency data')
         freq = self.analysis.apply(self.analysis.trace_frequency_df)
         freq.write_parquet(os.path.join(self.analysis_path, 'freqs.pqt'))
@@ -217,7 +201,7 @@ class WorkloadProcessor:
         freq_mean.write_parquet(os.path.join(self.analysis_path, 'freqs_residency.pqt'))
         print(freq_res)
 
-    def trace_overutilized_analysis(self):
+    def overutil_analysis(self):
         log.info('Collecting overutilized data')
         overutil = self.analysis.apply(self.analysis.trace_overutilized_df)
         overutil.write_parquet(os.path.join(self.analysis_path, 'overutilized.pqt'))
@@ -233,7 +217,7 @@ class WorkloadProcessor:
         overutil.write_parquet(os.path.join(self.analysis_path, 'overutilized_mean.pqt'))
         print(overutil)
 
-    def trace_sched_pelt_cfs_analysis(self):
+    def pelt_analysis(self):
         log.info('Collecting sched_pelt_cfs data')
         pelt = self.analysis.apply(self.analysis.trace_sched_pelt_cfs_df)
         pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs.pqt'))
@@ -248,7 +232,7 @@ class WorkloadProcessor:
         pelt.write_parquet(os.path.join(self.analysis_path, 'sched_pelt_cfs_mean.pqt'))
         print(pelt)
 
-    def trace_tasks_residency_time_analysis(self):
+    def tasks_residency_analysis(self):
         log.info('Collecting task residency data')
         tasks = self.analysis.apply(self.analysis.trace_tasks_residency_time_df)
         tasks.write_parquet(os.path.join(self.analysis_path, 'tasks_residency.pqt'))
@@ -302,7 +286,7 @@ class WorkloadProcessor:
         thermals.write_parquet(os.path.join(self.analysis_path, 'thermal.pqt'))
         print(thermals)
 
-    def trace_wakeup_latency_analysis(self):
+    def wakeup_latency_analysis(self):
         log.info('Collecting task wakeup latencies')
 
         if self.label not in SUPPORTED_WORKLOADS:
@@ -320,7 +304,7 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_mean.pqt'))
         print(df)
 
-    def trace_tasks_activations_analysis(self):
+    def tasks_activations_analysis(self):
         log.info('Collecting task activations')
 
         if self.label not in SUPPORTED_WORKLOADS:
@@ -348,13 +332,13 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'task_activations_stats_cluster.pqt'))
         print(df)
 
-    def trace_cgroup_attach_task_analysis(self):
+    def cgroup_attach_analysis(self):
         log.info('Collecting cgroup_attach_task events')
         df = self.analysis.apply(self.analysis.trace_cgroup_attach_task_df)
         df.write_parquet(os.path.join(self.analysis_path, 'cgroup_attach_task.pqt'))
         print(df)
 
-    def trace_wakeup_latency_cgroup_analysis(self):
+    def wakeup_latency_cgroup_analysis(self):
         log.info('Collecting per-cgroup task wakeup latency')
         df = self.analysis.apply(self.analysis.trace_wakeup_latency_cgroup_df)
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup.pqt'))
@@ -367,7 +351,7 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'wakeup_latency_cgroup_mean.pqt'))
         print(df)
 
-    def trace_tasks_residency_cgroup_analysis(self):
+    def tasks_residency_cgroup_analysis(self):
         log.info('Collecting per-cgroup tasks residency')
         df = self.analysis.apply(self.analysis.trace_tasks_residency_cgroup_df)
         df.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup.pqt'))
@@ -380,14 +364,14 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'tasks_residency_cgroup_total.pqt'))
         print(df)
 
-    def trace_uclamp_analysis(self):
+    def uclamp_analysis(self):
         log.info('Collecting uclamp data')
         df = self.analysis.apply(self.analysis.trace_uclamp_df)
 
         df.write_parquet(os.path.join(self.analysis_path, 'uclamp_updates.pqt'))
         print(df)
 
-    def trace_perf_event_analysis(self):
+    def perf_trace_event_analysis(self):
         log.info('Collecting perf counter event data')
         df = self.analysis.apply(self.analysis.trace_perf_counters_df)
 
@@ -395,7 +379,7 @@ class WorkloadProcessor:
         df.write_parquet(os.path.join(self.analysis_path, 'perf_counters.pqt'))
         print(df)
 
-    def trace_capacity_analysis(self):
+    def capacity_analysis(self):
         log.info('Collecting capacity data')
         df = self.analysis.apply(self.analysis.trace_capacity_df)
 
