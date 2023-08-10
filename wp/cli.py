@@ -42,7 +42,7 @@ def device(args):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog='WA Workload Processor')
+    parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(required=True, dest='subparser_name', title='subcommands')
     parser.add_argument('-v', '--verbose', action='store_true', help="Verbose output, including lisa debug logging")
 
