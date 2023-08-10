@@ -1802,4 +1802,3 @@ def print_table(df):
 
 def trim_wa_path(path):
     return "_".join(path.split("_")[1:-2])
-
