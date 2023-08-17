@@ -260,6 +260,7 @@ class WorkloadNotebookPlotter:
             'task_activations_stats_cluster_melt': self._load_task_activations_stats,
             'uclamp_updates': self._load_uclamp_updates,
             'fps': self._load_fps,
+            'frame_target_counts': self._load_fps,
         }
         return mapping[analysis]
 
@@ -1631,6 +1632,57 @@ class WorkloadNotebookPlotter:
 
         self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
+
+    @requires_analysis(['fps'])
+    def frame_target_count_line(self, target_fps: int = 30, height=600, width=None, include_label=True,
+                                title='Frame target counts per-iteration'):
+        """
+        Plot the per-iteration count of frames that did and did not meet the rendering target.
+
+        :param target_fps: Target fps to determine whether the frame met the target or not
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        df = self.ana.analysis['fps'].copy()
+        df['target_render_time'] = 1000.0 / target_fps
+        df['on_target'] = df['render_time'] < df['target_render_time']
+        df = df.groupby([
+            'tag', 'on_target', 'iteration'
+        ]).count().reset_index()[['tag', 'iteration', 'on_target', 'ts']].rename(columns={'ts': 'count'})
+
+        self.lines_px(
+            df, x='iteration', y='count', color='tag', facet_col='on_target',
+            facet_col_wrap=2, height=height, width=width, scale_y=True, title=title,
+        )
+
+    @requires_analysis(['fps'])
+    def frame_target_count_bar(self, target_fps: int = 30, height=600, width=None, include_label=True,
+                               title='Gmean frame target counts'):
+        """
+        Plot the gmean count of frames that did and did not meet the rendering target.
+
+        :param target_fps: Target fps to determine whether the frame met the target or not
+
+        .. note:: This plot uses plotly.express.
+            The resulting figure will be saved to `WorkloadNotebookAnalysis.px_figures`.
+        """
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        df = self.ana.analysis['fps'].copy()
+        df['target_render_time'] = 1000.0 / target_fps
+        df['on_target'] = df['render_time'] < df['target_render_time']
+        df = df.groupby([
+            'tag', 'on_target', 'iteration',
+        ]).count().reset_index()[['tag', 'iteration', 'on_target', 'ts']].rename(columns={'ts': 'count'})
+
+        self.gmean_bars(
+            df, x='on_target', y='count', color='tag', height=height, width=width, title=title,
+        )
 
     # -------- helper functions --------
 
