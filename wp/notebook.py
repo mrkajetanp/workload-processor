@@ -259,6 +259,7 @@ class WorkloadNotebookPlotter:
             'task_activations_stats_cluster': self._load_task_activations_stats,
             'task_activations_stats_cluster_melt': self._load_task_activations_stats,
             'uclamp_updates': self._load_uclamp_updates,
+            'fps': self._load_fps,
         }
         return mapping[analysis]
 
@@ -1589,6 +1590,45 @@ class WorkloadNotebookPlotter:
         layout.opts(
             opts.Curve(height=height, width=width, interpolation='steps-post', framewise=True)
         )
+        self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
+        return layout
+
+    # --- FPS instrument ---
+
+    def _load_fps(self):
+        self.ana.load_combined_analysis('fps.pqt', allow_missing=True)
+        log.info('Loaded fps into analysis')
+
+    @requires_analysis(['fps'])
+    def frame_rendering_line(self, height: int = 600, width: int = 1600, include_label: bool = True,
+                             target_fps: int = 30, title: str = 'Frame rendering times over time'):
+        """
+        Plot the frame rendering times over time overlaid between different runs, with a toggle to select the iteration.
+
+        :param target_fps: Target fps to draw the target rendering line from
+
+        .. note:: This plot uses HoloViews. The resulting figure will be saved to `WorkloadNotebookAnalysis.hv_figures`.
+        """
+        if include_label:
+            title = f"{self.ana.label} - {title}"
+
+        df = self.ana.analysis['fps'].copy()
+        df['target_render_time'] = 1000.0 / target_fps
+
+        ds = hv.Dataset(
+            df,
+            ['ts_iter', hv.Dimension('tag', values=self.ana.tags), 'iteration'],
+            ['render_time']
+        )
+
+        layout = ds.to(hv.Curve, 'ts_iter', 'render_time').overlay('tag').opts(
+            legend_position='bottom', title=title, framewise=True
+        )
+        layout *= hv.Curve(df, 'ts_iter', 'target_render_time').opts(color='orange')
+        layout.opts(
+            opts.Curve(height=height, width=width, interpolation='steps-pre', framewise=True),
+        )
+
         self.ana.hv_figures[self.ana._title_to_filename(title, '__line')] = layout
         return layout
 

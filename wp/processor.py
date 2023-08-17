@@ -385,3 +385,31 @@ class WorkloadProcessor:
 
         df.write_parquet(os.path.join(self.analysis_path, 'capacity.pqt'))
         print(df)
+
+    def fps_analysis(self):
+        log.info('Collecting fps data')
+
+        def process_fps_df(df, iteration):
+            return df.filter(
+                pl.col('actual_present_time_us') != 0x7fffffffffffffff
+            ).with_columns(
+                pl.col('*') / 1000000.0
+            ).select(
+                pl.col('actual_present_time_us').alias('ts') / 1000.0,
+                (pl.col('actual_present_time_us') - pl.col('actual_present_time_us').first()).alias('ts_iter') / 1000.0,
+                pl.col('desired_present_time_us').alias('desired_ts') / 1000.0,
+                pl.col('frame_ready_time_us').alias('ready_ts') / 1000.0,
+                pl.col('actual_present_time_us').diff().alias('render_time'),
+                pl.col('frame_ready_time_us').diff().alias('render_ready_time'),
+                pl.lit(iteration).alias('iteration'),
+            )[1:]
+
+        fps = df_add_wa_output_tags(pl.concat([
+            process_fps_df(
+                pl.read_csv(job.get_artifact_path('frames')), job.iteration
+            )
+            for job in self.wa_output.jobs
+        ]), self.wa_output).sort('iteration')
+
+        fps.write_parquet(os.path.join(self.analysis_path, 'fps.pqt'))
+        print(fps)
