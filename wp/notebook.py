@@ -1703,15 +1703,15 @@ class WorkloadNotebookPlotter:
         # prepare percentage differences & pvalues
         if percentage:
             # compute percentage differences
-            stats_perc = Stats(df, ref_group={'tag': self.ana.tags[0]}, value_col=y,
+            stats_perc = Stats(df, ref_group={color: self.ana.tags[0]}, value_col=y,
                                agg_cols=['iteration'], stats={'gmean': sp.stats.gmean}).df
             # re-add stub tag
             stats_perc_vals_temp = stats_perc.query(f"tag == '{self.ana.tags[1]}'")
-            stats_perc_vals_temp['tag'] = self.ana.tags[0]
-            stats_perc_vals_temp['value'] = 0
+            stats_perc_vals_temp[color] = self.ana.tags[0]
+            stats_perc_vals_temp[y] = 0
             # re-combine a df with percentage differences
             stats_perc_vals = pd.concat([stats_perc_vals_temp, stats_perc])
-            stats_perc_vals['order_kernel'] = stats_perc_vals['tag'].map(lambda x: self.ana.tags.index(x))
+            stats_perc_vals['order_kernel'] = stats_perc_vals[color].map(lambda x: self.ana.tags.index(x))
 
             if order_cluster:
                 stats_perc_vals['order_cluster'] = stats_perc_vals['cluster'].map(lambda x: shown_clusters.index(x))
@@ -1722,9 +1722,11 @@ class WorkloadNotebookPlotter:
             stats_perc_vals = stats_perc_vals.query("stat == 'gmean'").sort_values(by=sort_list).reset_index(drop=True)
 
         # compute absolute gmeans
-        gmeans = Stats(df, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}).df
+        gmeans = Stats(
+            df, value_col=y, agg_cols=['iteration'], stats={'gmean': sp.stats.gmean, 'std': None, 'sem': None}
+        ).df
         if gmean_round > 0:
-            gmeans['value'] = round(gmeans['value'], gmean_round)
+            gmeans[y] = round(gmeans[y], gmean_round)
         gmeans['order_kernel'] = gmeans['tag'].map(lambda x: self.ana.tags.index(x))
 
         if order_cluster:
@@ -1735,19 +1737,19 @@ class WorkloadNotebookPlotter:
         # prepare the data table
         data_table = gmeans_mean[[
             col for col in gmeans_mean.columns
-            if col in (['tag', 'value', 'test_name', 'variable', 'metric', 'chan_name', 'comm'] + include_columns)
+            if col in (['tag', y, 'test_name', 'variable', 'metric', 'chan_name', 'comm'] + include_columns)
         ]]
         if percentage:
-            data_table['perc_diff'] = stats_perc_vals['value'].map(lambda x: str(round(x, 2)) + '%')
-        data_table['value'] = data_table['value'].apply(lambda x: trim_number(x))
+            data_table['perc_diff'] = stats_perc_vals[y].map(lambda x: str(round(x, 2)) + '%')
+        data_table[y] = data_table[y].apply(lambda x: trim_number(x))
         if table_sort is not None:
             data_table = data_table.sort_values(by=table_sort)
         print_table(data_table)
 
         # prepare the plot labels
         plot_text = format_percentage(
-            gmeans_mean['value'], stats_perc_vals['value'], stats_perc_pvals['value']
-        ) if percentage else gmeans_mean['value']
+            gmeans_mean[y], stats_perc_vals[y], stats_perc_pvals[y], value_col=y
+        ) if percentage else gmeans_mean[y]
 
         # plot bars
         fig = px.bar(gmeans_mean, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
@@ -1819,21 +1821,20 @@ def trim_number(x):
         return f"{round(x / 1000000, 3)}M"
     if x > 10000:
         return f"{round(x / 1000, 2)}k"
-        return str(x)
     if x != 0 and x < 0.01:
         return f"{round(x * 1000000, 2)}μ"
     return str(x)
 
 
-def format_percentage(vals, perc, pvals, pval_threshold=0.02):
+def format_percentage(vals, perc, pvals, pval_threshold=0.02, value_col='value'):
     result = round(perc, 2).astype(str).apply(
         lambda s: f"({'' if s.startswith('-') or (s == '0.0') else '+'}{s}%)"
     ).to_frame()
     result['vals'] = vals.apply(lambda x: trim_number(x))
     result['pvals'] = pvals
     result['pval_marker'] = pvals.apply(lambda x: "* " if x < pval_threshold else "")
-    result['value'] = result['vals'] + " " + result['pval_marker'] + result['value']
-    return result['value']
+    result[value_col] = result['vals'] + " " + result['pval_marker'] + result[value_col]
+    return result[value_col]
 
 
 def print_table(df):
