@@ -133,23 +133,7 @@ The device controller can be accessed through `workload-processor device`.
 It's nothing more than a convenience tool for running `adb` commands to get information or change relevant kernel settings in sysfs.
 The main command is `status` which will just print available information about the status of the device.
 The commands will be run in the provided order and so can be chained (e.g. `workload-processor device sugov-rate-limit status`).
-To check which adb commands will be run just consult `wp.device`.
-
-#### Relevant help section
-
-```
-
-usage: WA Workload Processor device [-h]
-                                    {status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit}
-                                    [{status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit} ...]
-
-positional arguments:
-  {status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit}
-                        Device commands to run
-
-optional arguments:
-  -h, --help            show this help message and exit
-```
+For more details, consult `wp.device`.
 
 ## Notebook analysis
 

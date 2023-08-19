@@ -1,8 +1,30 @@
+"""
+Device controller module. Primarily intended to be accessed through the CLI as follows:
+```
+usage: workload-processor device [-h]
+                             {status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit,load-module}
+                             [{status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit,load-module} ...]
+
+positional arguments:
+  {status,disable-cpusets,disable-cpushares,menu,teo,latency-sensitive,powersave,performance,schedutil,sugov-rate-limit,load-module}
+                        Device commands to run
+
+optional arguments:
+  -h, --help            show this help message and exit
+```
+Providers helpers for controlling the target device over ADB.
+"""
+
 import os
+import sys
 import time
 import logging as log
 import confuse
+import subprocess
+
 from ppadb.client import Client as AdbClient
+from devlib.exception import TargetStableError
+from pathlib import Path
 
 from wp.constants import APP_NAME
 
@@ -10,9 +32,16 @@ from wp.constants import APP_NAME
 class WorkloadDevice:
     def __init__(self):
         self.config = confuse.Configuration(APP_NAME, __name__)
+        """Handle for the `Confuse` configuration object."""
         self.adb_client = AdbClient(host=self.config['host']['adb_host'].get(str),
                                     port=int(self.config['host']['adb_port'].get(int)))
-        self.device = self.adb_client.devices()[0]
+        """Handle for the ADB client"""
+        self.device = None
+        """Handle for the ADB device"""
+        try:
+            self.device = self.adb_client.devices()[0]
+        except IndexError:
+            raise TargetStableError('No target devices found')
 
         log.debug('Restarting adb as root')
         try:
@@ -92,8 +121,9 @@ class WorkloadDevice:
             pol_6_rl = self.device.shell("cat /sys/devices/system/cpu/cpufreq/policy6/schedutil/rate_limit_us").strip()
             log.info(f"policy rate limits: 0: {pol_0_rl}, 4: {pol_4_rl}, 6: {pol_6_rl}")
 
-    def reload_module(self):
-        log.info('Reloading the Lisa module')
+    def load_module(self):
+        # Try to load the module using modprobe (for in-tree builds
+        log.debug('Loading the Lisa module')
         self.device.shell("rmmod lisa")
         modules_base_path = self.config['target']['modules_path'].get()
         modules_dir_count = int(self.device.shell(f"ls {modules_base_path} | wc -l").strip())
@@ -101,6 +131,21 @@ class WorkloadDevice:
         modules_dir_version = self.device.shell(modules_dir_version_cmd).strip()
         modules_path = os.path.join(modules_base_path, modules_dir_version)
         self.device.shell(f"modprobe -d {modules_path} lisa")
+
+        # check if the lisa module is loaded
+        module_present = bool(self.device.shell('lsmod | grep lisa'))
+        if module_present:
+            log.info('Lisa module loaded successfully from the target device')
+            return
+
+        # Try to load the module using lisa-load-kmod
+        target_conf_path = Path(self.config['target']['target_conf'].get(str)).expanduser()
+        log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
+        log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
+        cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', str(target_conf_path)]
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+        for c in iter(lambda: process.stdout.read(1), b""):
+            sys.stdout.buffer.write(c)
 
     def disable_cpusets(self):
         log.info('Disabling cpusets for groups background, foreground, system-background and restricted')

@@ -23,7 +23,6 @@ The module can still normally be used through Python.
 
 import os
 import sys
-import time
 import subprocess
 import logging as log
 import confuse
@@ -32,11 +31,10 @@ from typing import Optional
 
 from pathlib import Path
 from datetime import date
-from ppadb.client import Client as AdbClient
 
-from devlib.exception import TargetStableError
 from wp.helpers import load_yaml
 from wp.constants import AGENDAS_PATH, SUPPORTED_WORKLOADS, APP_NAME
+from wp.device import WorkloadDevice
 
 
 # TODO: use devlib target to make this platform-agnostic
@@ -57,47 +55,11 @@ class WorkloadRunner:
         """Output directory for the run to be stored"""
         self.force = self.config['force'].get(False)
         """Overwrite the run output directory if it already exists"""
-        self.adb_client = AdbClient(host=self.config['host']['adb_host'].get(str),
-                                    port=int(self.config['host']['adb_port'].get(int)))
-        """ADB client handle"""
+        self.device: WorkloadDevice = WorkloadDevice()
+        """`device.WorkloadDevice` handle for device control"""
 
-        # TODO: fold device handling into WorkloadDevice
-
-        self.device = None
-        """ADB device handle"""
-        try:
-            self.device = self.adb_client.devices()[0]
-        except IndexError:
-            raise TargetStableError('No target devices found')
-
-        log.debug('Restarting adb as root')
-        try:
-            print(self.device.root())
-        except RuntimeError as e:
-            log.error(e)
-
-        # Give ADB on device a moment to initialise
-        time.sleep(3)
-
-        if self.config['no_module'].get(False):
-            return
-
-        # check if the lisa module is loaded
-        module_present = bool(self.device.shell('lsmod | grep lisa'))
-        if module_present:
-            log.info('Lisa module found on the target device')
-            return
-
-        # TODO: auto-reload if the power meter fails to load
-
-        # insert the lisa module
-        target_conf_path = Path(self.config['target']['target_conf'].get(str)).expanduser()
-        log.debug(f'Calling lisa-load-kmod with {target_conf_path}')
-        log_level = 'debug' if log.getLogger().isEnabledFor(log.DEBUG) else 'info'
-        cmd = ['lisa-load-kmod', '--log-level', log_level, '--conf', str(target_conf_path)]
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-        for c in iter(lambda: process.stdout.read(1), b""):
-            sys.stdout.buffer.write(c)
+        if not self.config['no_module'].get(False):
+            self.device.load_module()
 
     def run(self, workload: str, tag: str) -> Path:
         """
