@@ -26,23 +26,18 @@ class WorkloadDevice:
 
         self.device.shell("setenforce 0")
 
-    def dispatch(self, command):
-        cmd_to_function = {
-            'status': self.status,
-            'disable-cpusets': self.disable_cpusets,
-            'disable-cpushares': self.disable_cpushares,
-            'menu': self.menu,
-            'teo': self.teo,
-            'latency-sensitive': self.latency_sensitive,
-            'powersave': self.powersave,
-            'performance': self.performance,
-            'schedutil': self.schedutil,
-            'sugov-rate-limit': self.sugov_rate_limit,
-            'reload-module': self.reload_module,
-        }
+    def dispatch(self, command: str):
+        """
+        Call the device controller function corresponding to the command string.
+
+        :param command: Command string
+        :raises RuntimeError: In case of ADB errors
+        """
+        def command_to_function(cmd):
+            return getattr(self, cmd.replace('-', '_'))
 
         try:
-            cmd_to_function[command]()
+            command_to_function(command)()
         except RuntimeError as e:
             if 'closed' in str(e):
                 log.error('ADB Connection closed')

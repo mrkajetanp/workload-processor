@@ -61,6 +61,8 @@ class WorkloadRunner:
                                     port=int(self.config['host']['adb_port'].get(int)))
         """ADB client handle"""
 
+        # TODO: fold device handling into WorkloadDevice
+
         self.device = None
         """ADB device handle"""
         try:
@@ -85,6 +87,8 @@ class WorkloadRunner:
         if module_present:
             log.info('Lisa module found on the target device')
             return
+
+        # TODO: auto-reload if the power meter fails to load
 
         # insert the lisa module
         target_conf_path = Path(self.config['target']['target_conf'].get(str)).expanduser()
