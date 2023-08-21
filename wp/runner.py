@@ -37,7 +37,6 @@ from wp.constants import AGENDAS_PATH, SUPPORTED_WORKLOADS, APP_NAME
 from wp.device import WorkloadDevice
 
 
-# TODO: use devlib target to make this platform-agnostic
 class WorkloadRunner:
     """The runner class that performs setup and dispatches the run to `workload-automation`."""
 
