@@ -1816,7 +1816,7 @@ class WorkloadNotebookPlotter:
 
         return data_table
 
-    def lines_px(self, df: pd.DataFrame, x: str = 'iteration', y: str = 'value',
+    def lines_px(self, df: pd.DataFrame, x: str = 'iteration', y: str = 'value', sort_cols=['iteration'],
                  color: str = 'tag', facet_col: Optional[str] = None, facet_col_wrap: int = 2,
                  height: int = 600, width: Optional[int] = None, title: Optional[str] = None,
                  scale_y: bool = False, renderer: str = 'iframe'):
@@ -1831,12 +1831,16 @@ class WorkloadNotebookPlotter:
         :param color: Column denoting how to split the data into lines
         :param facet_col: Column denoting how to split the plot into facets
         :param facet_col_wrap: Number of facet column in one row of the plot
+        :param sort_cols: Columns to sort the `df` by apart from `tag`
         :param title: Displayed title of the plot
         :param width: Plot width
         :param height: Plot height
         :param scale_y: Whether the y axis should maintain the same scale across facets
         :param renderer: Plotly express renderer to be used
         """
+
+        df['order_tag'] = df['tag'].map(lambda x: self.ana.tags.index(x))
+        df = df.sort_values(by=['order_tag', *sort_cols])
         fig = px.line(df, x=x, y=y, color=color, facet_col=facet_col, facet_col_wrap=facet_col_wrap,
                       height=height, width=width, title=title)
         if not scale_y:
