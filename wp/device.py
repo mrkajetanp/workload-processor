@@ -28,18 +28,23 @@ from pathlib import Path
 from devlib.exception import TargetStableCalledProcessError
 
 from wp.constants import APP_NAME
+from wp.exception import WPConfigError
 
 
 class WorkloadDevice:
     def __init__(self):
         self.config = confuse.Configuration(APP_NAME, __name__)
         """Handle for the `Confuse` configuration object."""
-        self.device = Target.from_conf(
-            TargetConf.from_yaml_map(
-                Path(self.config['target']['target_conf'].get()).expanduser()
-            )
-        )
+        self.device = None
         """Handle for the Target device"""
+        try:
+            self.device = Target.from_conf(
+                TargetConf.from_yaml_map(
+                    Path(self.config['target']['target_conf'].get()).expanduser()
+                )
+            )
+        except FileNotFoundError:
+            raise WPConfigError('target_conf was not properly set in the config')
 
         self.device.execute("setenforce 0", as_root=True)
 

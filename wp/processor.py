@@ -15,7 +15,7 @@ from wp.analysis import WorkloadAnalysisRunner
 from wp.constants import APP_NAME, SUPPORTED_WORKLOADS
 from wp.helpers import wa_output_to_mock_traces, wa_output_to_traces, cpu_cluster
 from wp.helpers import df_sort_by_clusters, df_add_wa_output_tags, df_iterations_mean
-from wp.exception import WPMetricFailedError, WorkloadProcessorError
+from wp.exception import WPMetricFailedError, WorkloadProcessorError, WPConfigError
 
 
 class WorkloadProcessor:
@@ -45,7 +45,11 @@ class WorkloadProcessor:
         self.plat_info = None
         plat_info_path = os.path.expanduser(self.config['target']['plat_info'].get(str))
         if plat_info_path is not None:
-            self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
+            try:
+                self.plat_info = PlatformInfo.from_yaml_map(plat_info_path)
+            except FileNotFoundError:
+                raise WPConfigError('plat_info was not properly set in the config')
+
 
         trace_parquet_found = shutil.which('trace-parquet') is not None
         no_parser = self.config['no_parser'].get(False)

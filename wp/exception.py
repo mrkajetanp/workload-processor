@@ -8,3 +8,6 @@ class WorkloadProcessingError(Exception):
 
 class WPMetricFailedError(Exception):
     pass
+
+class WPConfigError(Exception):
+    pass
