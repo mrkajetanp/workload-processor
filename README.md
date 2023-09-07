@@ -24,15 +24,11 @@ By default, the values in wp/config_default.yaml will be used. They can be overr
 
 * `plat_info` - Platform info used for some analysis metrics. Either use the one provided in `assets/` for Pixel 6 or generate one by modifying the provided script.
 * `target_conf` - Path to the device target config. Used to build the Lisa module with lisa-load-kmod.
-* `adb_host` & `adb_port` - Defaults should work, ADB access settings used by the `run` and `device` subcommands
 
 ```
 target:
   plat_info: ~/power/pixel6/workload-processor/assets/p6-platform-info.yml
   target_conf: ~/tools/lisa/target_conf_p6.yml
-host:
-  adb_host: 127.0.0.1
-  adb_port: 5037
 ```
 
 Additionally, the following things can be configured in the same way:
@@ -105,10 +101,10 @@ While much slower it might be useful for some cases where `trace-parquet` might 
 ### Relevant help section
 
 ```
-usage: WA Workload Processor process [-h] [-i | --no-parser] [-s]
-                                     [-m {...} [{...} ...]
-                                     | --no-metrics]
-                                     wa_path
+usage: workload-processor process [-h] [-i | --no-parser] [-s]
+                                  [-m {...} [{...} ...]
+                                  | --no-metrics]
+                                  wa_path
 
 positional arguments:
   wa_path
