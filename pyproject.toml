@@ -1,6 +1,6 @@
 [project]
 name = "workload-processor"
-version = "0.0.1"
+version = "0.1.1"
 authors = [
   { name="Kajetan Puchalski", email="kajetan.puchalski@arm.com" },
 ]
@@ -20,3 +20,7 @@ workload-processor = "wp.cli:main"
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]
