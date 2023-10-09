@@ -1,4 +1,4 @@
-name: workload-processor
+name: workload-processor docs
 
 # build the documentation whenever there are new commits on main
 on:
