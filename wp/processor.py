@@ -22,7 +22,7 @@ class WorkloadProcessor:
     def __init__(self, output_path, config=None):
         self.config = confuse.Configuration(APP_NAME, __name__) if config is None else config
 
-        pl.enable_string_cache(True)
+        pl.enable_string_cache()
         pl.Config.set_tbl_formatting('ASCII_MARKDOWN')
         pl.Config.set_tbl_hide_column_data_types(True)
         pl.Config.set_tbl_rows(10)
